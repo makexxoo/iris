@@ -1,6 +1,6 @@
 {
   "name": "@agent-iris/claude-code-channel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code channel plugin for agent-iris — connects iris server to Claude Code CLI via WebSocket",
   "main": "./dist/index.js",
   "bin": {
@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node --sourcemap=external && chmod +x dist/index.js && tsc --noEmit",
+    "build": "NODE_ENV=production bun build src/index.ts --outdir dist --target node --sourcemap=external --define 'process.env.NODE_ENV=\"production\"' && chmod +x dist/index.js && tsc --noEmit",
     "prepublishOnly": "bun run build",
     "start": "node dist/index.js",
     "test": "bun test",
