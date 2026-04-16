@@ -1,0 +1,51 @@
+{
+  "name": "@agent-iris/openclaw-channel",
+  "version": "0.1.0",
+  "description": "iris messaging gateway as an OpenClaw channel plugin",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./api": "./dist/api.js",
+    "./runtime-api": "./dist/runtime-api.js",
+    "./secret-contract-api": "./dist/secret-contract-api.js"
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "pack": "bun run build && bun pm pack"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "openclaw": "^2026.4.11"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "channel": {
+      "id": "iris",
+      "label": "Iris Gateway",
+      "selectionLabel": "Iris (Messaging Gateway)",
+      "docsPath": "/channels/iris",
+      "docsLabel": "iris",
+      "blurb": "Unified messaging gateway supporting WeChat, Feishu, Telegram and more.",
+      "aliases": [
+        "ir"
+      ],
+      "order": 90
+    },
+    "install": {
+      "npmSpec": "@agent-iris/openclaw-channel",
+      "defaultChoice": "npm"
+    }
+  }
+}

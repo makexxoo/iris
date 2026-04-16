@@ -1,0 +1,16 @@
+{
+  "id": "iris",
+  "channels": ["iris"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "iris": {
+      "schema": {
+        "type": "object"
+      }
+    }
+  }
+}

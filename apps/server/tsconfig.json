@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "paths": {
+      "@agent-iris/core": ["../../packages/core/src/index.ts"],
+      "@agent-iris/channel-telegram": ["../../packages/channel-telegram/src/index.ts"],
+      "@agent-iris/channel-feishu": ["../../packages/channel-feishu/src/index.ts"],
+      "@agent-iris/channel-wechat": ["../../packages/channel-wechat/src/index.ts"],
+      "@agent-iris/backend-openclaw": ["../../packages/backend-openclaw/src/index.ts"],
+      "@agent-iris/backend-openclaw-channel": [
+        "../../packages/backend-openclaw-channel/src/index.ts"
+      ],
+      "@agent-iris/backend-hermes": ["../../packages/backend-hermes/src/index.ts"],
+      "@agent-iris/plugin-member-info": ["../../packages/plugin-member-info/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

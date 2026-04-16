@@ -1,0 +1,14 @@
+{
+  "name": "@agent-iris/plugin-member-info",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-iris/core": "workspace:*",
+    "axios": "^1.7.2",
+    "pino": "^9.3.2"
+  }
+}

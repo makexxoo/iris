@@ -1,0 +1,26 @@
+{
+  "name": "@agent-iris/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "agent-iris-server": "./dist/index.js"
+  },
+  "module": "src/index.ts",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node --sourcemap=external && chmod +x dist/index.js && tsc --noEmit",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-iris/core": "workspace:*",
+    "@agent-iris/channel-telegram": "workspace:*",
+    "@agent-iris/channel-feishu": "workspace:*",
+    "@agent-iris/channel-wechat": "workspace:*",
+    "@agent-iris/backend-openclaw-channel": "workspace:*",
+    "@agent-iris/backend-claude-code-channel": "workspace:*",
+    "@agent-iris/plugin-member-info": "workspace:*",
+    "pino": "^9.3.2"
+  }
+}

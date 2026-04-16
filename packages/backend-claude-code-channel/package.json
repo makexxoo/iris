@@ -1,0 +1,14 @@
+{
+  "name": "@agent-iris/backend-claude-code-channel",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@agent-iris/core": "workspace:*",
+    "pino": "^9.3.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

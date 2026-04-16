@@ -1,0 +1,17 @@
+{
+  "name": "@agent-iris/channel-wechat",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-iris/core": "workspace:*",
+    "axios": "^1.7.2",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@types/xml2js": "^0.4.14"
+  }
+}

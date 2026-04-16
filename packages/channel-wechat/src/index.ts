@@ -1,0 +1,1 @@
+export { WechatAdapter } from './adapter';

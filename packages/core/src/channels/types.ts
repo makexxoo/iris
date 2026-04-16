@@ -1,0 +1,24 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { IrisMessage } from '../message';
+
+export interface ChannelAdapter {
+  name: string;
+  /**
+   * Register webhook route(s) on the Fastify server, or start long-lived connections
+   * (e.g. WebSocket) that feed messages into the router.
+   */
+  register(server: FastifyInstance): void;
+  /**
+   * Parse the inbound webhook request into a canonical IrisMessage.
+   * Only required for HTTP webhook-based channels; WS-based channels omit this.
+   * Return null to silently ignore the request (e.g. verification pings).
+   */
+  parse?(req: FastifyRequest, reply: FastifyReply): Promise<IrisMessage | null>;
+  /** Send the AI reply back to the user via the channel's API (uses original message context) */
+  reply(message: IrisMessage, text: string): Promise<void>;
+  /**
+   * Send a reply to a user by channelUserId alone, without the original message context.
+   * Used by async delivery paths (e.g. proactive outbound via /v1/outbound).
+   */
+  replyToUser?(channelUserId: string, text: string): Promise<void>;
+}

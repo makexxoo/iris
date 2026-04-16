@@ -1,0 +1,54 @@
+server:
+  port: 9527
+
+plugins: []
+
+# channels 数组形式，每个 channel 有 type（适配器类型）和 name（唯一实例名）
+channels:
+  - type: feishu
+    name: feishu-openclaw
+    enabled: true
+    apps:
+      - appId: cli_xxx
+        appSecret: xxx
+        domain: feishu   # feishu (domestic) or lark (international)
+        groupPolicy: "open"
+        streaming: true
+        requireMention: true
+  - type: feishu
+    name: feishu-iris
+    enabled: true
+    apps:
+      - appId: cli_xxx
+        appSecret: xxx
+        domain: feishu   # feishu (domestic) or lark (international)
+        groupPolicy: "open"
+        streaming: true
+        requireMention: true
+
+
+backends:
+  # openclaw-channel: WS-based flow via the iris channel plugin installed in openclaw.
+  #   iris runs a WS server; openclaw plugin connects to it.
+  #   feishu → iris → WS → openclaw AI → WS → iris → feishu
+  # openclaw: synchronous REST flow (openclaw exposes /v1/chat)
+  # hermes:  synchronous REST flow
+  default: claude-code
+
+  # routes: 按 channel name（实例名）分发到对应 backend
+  routes:
+    feishu-openclaw: openclaw
+    feishu-iris: claude-code
+    # feishu-support: openclaw
+    # telegram-main: claude-code
+
+  openclaw:
+    enabled: false
+    # WS path: /ws/openclaw (default). Configure irisWsUrl in openclaw as:
+    #   ws://<iris-host>:9527/ws/openclaw
+    # path: /ws/openclaw           # override if needed
+
+  claude-code:
+    enabled: true
+    # WS path: /ws/claude-code (default), timeout: 900000ms (15 min)
+    # Run the CLI: claude-code-channel --iris-ws ws://<iris-host>:9527/ws/claude-code

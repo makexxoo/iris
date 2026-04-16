@@ -1,0 +1,27 @@
+{
+  "name": "@agent-iris",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/server dev",
+    "start": "bun run --cwd apps/server start",
+    "build": "tsc -b",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint 'packages/*/src/**/*.ts' 'apps/*/src/**/*.ts'",
+    "format": "prettier --write 'packages/*/src/**/*.ts' 'apps/*/src/**/*.ts'",
+    "format:check": "prettier --check 'packages/*/src/**/*.ts' 'apps/*/src/**/*.ts'"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint": "9.26.0",
+    "eslint-config-prettier": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.5.3"
+  }
+}
