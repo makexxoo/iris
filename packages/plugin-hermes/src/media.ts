@@ -53,14 +53,10 @@ function attachmentType(mime: string): 'image' | 'video' | 'audio' | 'file' {
 
 export function extractMedia(text: string, log?: (msg: string) => void): ExtractResult {
   const files: ExtractedFile[] = [];
-  let cleaned = text;
 
   for (const match of text.matchAll(MEDIA_PATTERN)) {
     const raw = match.groups?.path ?? '';
     const filePath = raw.replace(/^[`"']|[`"']$/g, '').trim();
-
-    // Remove MEDIA: tag from text
-    cleaned = cleaned.replace(match[0], '').trim();
 
     if (!filePath) continue;
     if (!existsSync(filePath)) {
@@ -97,6 +93,11 @@ export function extractMedia(text: string, log?: (msg: string) => void): Extract
       attachmentType: attachmentType(mime),
     });
   }
+
+  // Remove all MEDIA: tags from text in one pass (mirrors hermes-agent's media_pattern.sub('', cleaned))
+  const cleaned = MEDIA_PATTERN.source
+    ? text.replace(new RegExp(MEDIA_PATTERN.source, MEDIA_PATTERN.flags), '').replace(/\n{3,}/g, '\n\n').trim()
+    : text;
 
   return { text: cleaned, files };
 }
