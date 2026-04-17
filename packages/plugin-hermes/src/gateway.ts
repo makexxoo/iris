@@ -1,6 +1,42 @@
+// packages/plugin-hermes/src/gateway.ts
 import type { SessionManager } from './session';
 import { queryHermes, type HermesConfig, type IrisWsMessage } from './hermes';
+import { extractMedia, type ExtractedFile } from './media';
 import { logger } from './logger';
+
+interface TextPart {
+  type: 'text';
+  text: string;
+}
+
+interface ImageUrlPart {
+  type: 'image_url';
+  image_url: { url: string; detail: string };
+}
+
+export type ContentPart = TextPart | ImageUrlPart;
+export type ReplyContent = ContentPart[];
+
+function buildContentArray(text: string, files: ExtractedFile[]): ReplyContent {
+  const parts: ReplyContent = [];
+  if (text) {
+    parts.push({ type: 'text', text });
+  }
+  for (const f of files) {
+    parts.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${f.mimeType};base64,${f.base64}`,
+        detail: f.fileName,
+      },
+    });
+  }
+  // Always emit at least one text part so iris can safely read .text
+  if (parts.length === 0) {
+    parts.push({ type: 'text', text: '' });
+  }
+  return parts;
+}
 
 /**
  * Handle a single inbound iris message.
@@ -10,7 +46,7 @@ export function handleIrisMessage(params: {
   msg: IrisWsMessage;
   sessionManager: SessionManager;
   hermesConfig: HermesConfig;
-  sendReply: (sessionId: string, text: string) => void;
+  sendReply: (sessionId: string, content: ReplyContent) => void;
 }): void {
   const { msg, sessionManager, hermesConfig, sendReply } = params;
   const { sessionId } = msg;
@@ -25,17 +61,23 @@ export function handleIrisMessage(params: {
     logger.info({ sessionId, channel: msg.channel, text: text.slice(0, 80) }, 'handling iris message');
 
     try {
-      const reply = await queryHermes(msg, hermesConfig);
+      const rawReply = await queryHermes(msg, hermesConfig);
 
-      if (!reply) {
+      if (rawReply === null || rawReply === undefined) {
         logger.warn({ sessionId }, 'hermes returned empty result, skipping reply');
         return;
       }
 
-      sendReply(sessionId, reply);
+      const { text: cleanText, files } = extractMedia(rawReply, (msg) =>
+        logger.warn({ sessionId, msg }, 'media extraction warning'),
+      );
+
+      logger.info({ sessionId, files: files.length }, 'extracted media files');
+
+      sendReply(sessionId, buildContentArray(cleanText, files));
     } catch (err) {
       logger.error({ err, sessionId }, 'hermes query error');
-      sendReply(sessionId, `Error: ${String(err)}`);
+      sendReply(sessionId, [{ type: 'text', text: `Error: ${String(err)}` }]);
     }
   });
 }

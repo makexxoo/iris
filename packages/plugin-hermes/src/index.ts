@@ -2,7 +2,7 @@
 import WebSocket from 'ws';
 import { parseArgs } from 'node:util';
 import { SessionManager } from './session';
-import { handleIrisMessage } from './gateway';
+import { handleIrisMessage, type ReplyContent } from './gateway';
 import type { HermesConfig, IrisWsMessage } from './hermes';
 import { logger } from './logger';
 
@@ -76,9 +76,9 @@ function connect(): void {
       msg: m as unknown as IrisWsMessage,
       sessionManager,
       hermesConfig,
-      sendReply: (sessionId, text) => {
+      sendReply: (sessionId: string, content: ReplyContent) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'reply', sessionId, text }));
+          ws.send(JSON.stringify({ type: 'reply', sessionId, content }));
         }
       },
     });
