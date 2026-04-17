@@ -59,7 +59,7 @@ backends:
     # 微信用户走 hermes-agent（HTTP REST 模式）
     wechat-main: hermes
     # 不在channel中定义的微信用户，默认转发渠道
-    wechat-default: openclaw
+    wechat-default: hermes
     # feishu-support: openclaw
     # telegram-main: hermes
 

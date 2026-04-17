@@ -144,14 +144,34 @@ export class WechatAdapter implements ChannelAdapter {
   }
 
   /** Reply to a message that was received via a known AccountConnection. */
-  async reply(message: IrisMessage, text: string): Promise<void> {
+  async reply(message: IrisMessage): Promise<void> {
     const raw = message.raw as { accountId: string; toUserId: string };
     const conn = this.connections.get(raw.accountId);
     if (!conn) {
       logger.error({ accountId: raw.accountId }, 'wechat: no connection for accountId');
       return;
     }
-    await conn.sendText(raw.toUserId, text);
+
+    if (message.content.text) await conn.sendText(raw.toUserId, message.content.text ?? '');
+
+    for (const att of message.content.attachments ?? []) {
+      if (!att.base64) {
+        logger.warn({ fileName: att.fileName }, 'wechat: attachment missing base64, skipping');
+        continue;
+      }
+      try {
+        const buf = Buffer.from(att.base64, 'base64');
+        await conn.sendFile(
+          raw.toUserId,
+          buf,
+          att.fileName ?? 'file',
+          att.mimeType ?? 'application/octet-stream',
+        );
+        logger.info({ fileName: att.fileName, bytes: buf.length }, 'wechat: sent attachment');
+      } catch (err) {
+        logger.error({ err, fileName: att.fileName }, 'wechat: failed to send attachment');
+      }
+    }
   }
 
   /**

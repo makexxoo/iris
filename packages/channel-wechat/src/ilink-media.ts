@@ -161,6 +161,8 @@ export interface SendFileParams {
   fileBytes: Buffer;
   fileName: string;
   mimeType: string;
+  contextToken: string | null;
+  clientId: string;
   buildHeaders: (token: string, body: string) => Record<string, string>;
 }
 

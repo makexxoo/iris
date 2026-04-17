@@ -48,11 +48,11 @@ export class TelegramAdapter implements ChannelAdapter {
     };
   }
 
-  async reply(message: IrisMessage, text: string): Promise<void> {
+  async reply(message: IrisMessage): Promise<void> {
     const rawUpdate = message.raw as TelegramBot.Update;
     const chatId = rawUpdate.message?.chat.id;
     if (chatId === undefined) return;
-    await this.bot.sendMessage(chatId, text);
+    await this.bot.sendMessage(chatId, message.content.text ?? '');
   }
 
   async replyToUser(channelUserId: string, text: string): Promise<void> {

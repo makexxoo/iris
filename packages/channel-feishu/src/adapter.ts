@@ -35,14 +35,14 @@ export class FeishuAdapter implements ChannelAdapter {
     }
   }
 
-  async reply(message: IrisMessage, text: string): Promise<void> {
+  async reply(message: IrisMessage): Promise<void> {
     const raw = message.raw as Record<string, any>;
     const conn = this.connections.get(raw.app_id);
     if (!conn) {
       logger.error({ appId: raw.app_id }, 'feishu: no connection for appId');
       return;
     }
-    await conn.sendToChat(raw.message.chat_id, text);
+    await conn.sendToChat(raw.message.chat_id, message.content.text ?? '');
   }
 
   /**

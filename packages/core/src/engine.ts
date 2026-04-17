@@ -77,21 +77,21 @@ export class MessageEngine {
     const backend = this.backendAdapters.get(backendName);
     if (!backend) {
       logger.error({ backendName }, 'backend not found');
-      await channelAdapter.reply(
-        message,
-        `backend not found: ${backendName}. 请联系管理员为您配置智能体`,
-      );
+      message.content = {
+        type: 'text',
+        text: `backend not found: ${backendName}. 请联系管理员为您配置智能体`,
+      };
+      await channelAdapter.reply(message);
       return;
     }
 
-    const replyContent = await backend.chat({
+    message.content = await backend.chat({
       message,
       context: ctx.business,
     });
-    message.content = replyContent;
 
     logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
 
-    await channelAdapter.reply(message, replyContent.text ?? '');
+    await channelAdapter.reply(message);
   }
 }
