@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import axios, { AxiosError } from 'axios';
 import pino from 'pino';
 import type { IrisMessage, MessageHandler } from '@agent-iris/core';
+import { uploadAndBuildItem } from './ilink-media.js';
 
 const logger = pino({ name: 'channel-wechat:account' });
 
@@ -155,6 +156,42 @@ export class AccountConnection {
       msg: message,
       base_info: { channel_version: CHANNEL_VERSION },
     };
+    const body = JSON.stringify(payload);
+    const url = `${this.baseUrl}/${EP_SEND_MESSAGE}`;
+
+    await axios.post(url, body, {
+      headers: buildHeaders(this.token, body),
+      timeout: API_TIMEOUT_MS,
+    });
+  }
+
+  async sendFile(toUserId: string, fileBytes: Buffer, fileName: string, mimeType: string): Promise<void> {
+    const contextToken = this.contextTokens.get(toUserId) ?? null;
+    const clientId = `iris-wechat-${randomUUID().replace(/-/g, '')}`;
+
+    const item = await uploadAndBuildItem({
+      baseUrl: this.baseUrl,
+      token: this.token,
+      toUserId,
+      fileBytes,
+      fileName,
+      mimeType,
+      buildHeaders,
+    });
+
+    const message: Record<string, unknown> = {
+      from_user_id: '',
+      to_user_id: toUserId,
+      client_id: clientId,
+      message_type: MSG_TYPE_BOT,
+      message_state: MSG_STATE_FINISH,
+      item_list: [item],
+    };
+    if (contextToken) {
+      message['context_token'] = contextToken;
+    }
+
+    const payload = { msg: message, base_info: { channel_version: CHANNEL_VERSION } };
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}/${EP_SEND_MESSAGE}`;
 
