@@ -38,7 +38,7 @@ function parseReplyContent(msg: Record<string, unknown>): MessageContent {
           base64,
         } satisfies MessageAttachment;
       });
-    const type = attachments.length > 0 ? attachments[0].type : 'text';
+    const type = text ? 'text' : attachments.length > 0 ? attachments[0].type : 'text';
     return { type, text, attachments: attachments.length > 0 ? attachments : undefined };
   }
 
@@ -68,7 +68,8 @@ interface PendingReply {
  *
  * Protocol:
  *   iris → plugin (WS): { type: 'message', id, channel, channelUserId, sessionId, content, timestamp, context }
- *   plugin → iris (WS): { type: 'reply', sessionId, text }
+ *   plugin → iris (WS): { type: 'reply', sessionId, content: ContentPart[] }
+ *                    or (legacy): { type: 'reply', sessionId, text: string }
  */
 export class HermesBackend implements BackendAdapter {
   private wss: WebSocketServer | null = null;
