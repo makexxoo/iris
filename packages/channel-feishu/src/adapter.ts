@@ -17,15 +17,15 @@ export class FeishuAdapter implements ChannelAdapter {
   readonly name: string;
   private connections = new Map<string, AppConnection>();
 
-  constructor(
-    config: FeishuConfig,
-    private messageHandler: MessageHandler,
-  ) {
+  constructor(config: FeishuConfig, messageHandler: MessageHandler) {
     this.name = config.name ?? 'feishu';
     for (const appCfg of config.apps) {
       const conn = new AppConnection(appCfg, messageHandler, this.name);
       this.connections.set(appCfg.appId, conn);
     }
+  }
+  support(message: IrisMessage): boolean {
+    return message.channel == this.name;
   }
 
   /** Start all per-app WebSocket connections to Feishu/Lark event gateway */
