@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build",
     "pack": "bun run build && bun pm pack"
   },
   "dependencies": {
