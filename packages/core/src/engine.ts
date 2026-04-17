@@ -85,13 +85,22 @@ export class MessageEngine {
       return;
     }
 
-    message.content = await backend.chat({
-      message,
-      context: ctx.business,
-    });
+    try {
+      message.content = await backend.chat({
+        message,
+        context: ctx.business,
+      });
 
-    logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
+      logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
 
-    await channelAdapter.reply(message);
+      await channelAdapter.reply(message);
+    } catch (e) {
+      logger.info({ channel: message.channel, backendName, error: e }, '智能体处理失败');
+      message.content = {
+        type: 'text',
+        text: `智能体调用失败: ${e}`,
+      };
+      await channelAdapter.reply(message);
+    }
   }
 }
