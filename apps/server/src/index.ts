@@ -13,6 +13,7 @@ import { FeishuAdapter } from '@agent-iris/channel-feishu';
 import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wechat';
 import { OpenclawChannelBackend } from '@agent-iris/backend-openclaw-channel';
 import { ClaudeCodeChannelBackend } from '@agent-iris/backend-claude-code-channel';
+import { HermesBackend } from '@agent-iris/backend-hermes';
 import { MemberInfoPlugin } from '@agent-iris/plugin-member-info';
 
 const { values: argv } = parseArgs({
@@ -67,6 +68,12 @@ async function main() {
   if (config.backends['claude-code']?.enabled) {
     claudeCodeChannelBackend = new ClaudeCodeChannelBackend(config.backends['claude-code']);
     router.registerBackend(claudeCodeChannelBackend);
+  }
+
+  let hermesBackend: HermesBackend | undefined;
+  if (config.backends.hermes?.enabled !== false) {
+    hermesBackend = new HermesBackend(config.backends.hermes ?? {});
+    router.registerBackend(hermesBackend);
   }
 
   // --- Channel adapters (array form) ---
@@ -141,6 +148,7 @@ async function main() {
   // Attach WS backends to the shared HTTP server (no separate port needed)
   openclawChannelBackend?.attach(server.server);
   claudeCodeChannelBackend?.attach(server.server);
+  hermesBackend?.attach(server.server);
 
   const port = config.server.port;
   await server.listen({ port, host: '0.0.0.0' });

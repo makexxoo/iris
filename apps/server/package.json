@@ -27,6 +27,7 @@
     "@agent-iris/channel-wechat": "workspace:*",
     "@agent-iris/backend-openclaw-channel": "workspace:*",
     "@agent-iris/backend-claude-code-channel": "workspace:*",
+    "@agent-iris/backend-hermes": "workspace:*",
     "@agent-iris/plugin-member-info": "workspace:*"
   }
 }
