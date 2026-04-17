@@ -76,7 +76,18 @@ export interface IrisConfig {
      * e.g. { "feishu-main": "claude-code", "feishu-support": "openclaw" }
      */
     routes: Record<string, string>;
-    hermes?: { baseUrl: string; token?: string };
+    /**
+     * hermes-agent backend — plugin-hermes CLI connects here as WS client.
+     * Mirrors the openclaw-channel / claude-code-channel pattern.
+     * Run: hermes-plugin --iris-ws ws://<iris-host>:9527/ws/hermes
+     */
+    hermes?: {
+      enabled?: boolean;
+      /** WS path to listen on (default: /ws/hermes) */
+      path?: string;
+      /** How long to wait for a reply before timing out, in ms (default: 300000 = 5 min) */
+      timeoutMs?: number;
+    };
     /** WS-based openclaw-channel backend */
     openclaw?: { timeoutMs?: number; path?: string; enabled?: boolean };
     /** WS-based claude-code-channel backend */
