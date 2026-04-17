@@ -204,10 +204,10 @@ export async function uploadAndBuildItem(p: SendFileParams): Promise<Record<stri
     buildHeaders: p.buildHeaders,
   });
 
-  const uploadUrl = uploadFullUrl || cdnUploadUrl(uploadParam, filekey);
-  if (!uploadUrl) {
+  if (!uploadFullUrl && !uploadParam) {
     throw new Error('getuploadurl returned neither upload_param nor upload_full_url');
   }
+  const uploadUrl = uploadFullUrl || cdnUploadUrl(uploadParam, filekey);
 
   const encryptedQueryParam = await uploadCiphertext(ciphertext, uploadUrl);
 
