@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
-import { BackendAdapter, BackendRequest } from '@agent-iris/core';
+import { BackendAdapter, BackendRequest, MessageContent } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-openclaw' });
 
@@ -97,7 +97,7 @@ export class OpenclawChannelBackend implements BackendAdapter {
     }
   }
 
-  async chat(req: BackendRequest): Promise<string> {
+  async chat(req: BackendRequest): Promise<MessageContent> {
     const { message } = req;
     const sessionId = message.sessionId;
 
@@ -133,7 +133,7 @@ export class OpenclawChannelBackend implements BackendAdapter {
       context: req.context,
     });
 
-    return new Promise<string>((resolve, reject) => {
+    const replyText = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(sessionId);
         reject(new Error(`openclaw: reply timeout for session ${sessionId}`));
@@ -149,6 +149,7 @@ export class OpenclawChannelBackend implements BackendAdapter {
         }
       });
     });
+    return { type: 'text', text: replyText };
   }
 
   close(): void {

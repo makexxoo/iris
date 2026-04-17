@@ -47,7 +47,7 @@ describe('ClaudeCodeChannelBackend', () => {
     ws.send(JSON.stringify({ type: 'reply', sessionId: 'session-1', text: 'hello back' }));
 
     const result = await chatPromise;
-    expect(result).toBe('hello back');
+    expect(result).toEqual({ type: 'text', text: 'hello back' });
     ws.close();
   });
 

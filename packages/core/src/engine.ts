@@ -84,13 +84,14 @@ export class MessageEngine {
       return;
     }
 
-    const replyText = await backend.chat({
+    const replyContent = await backend.chat({
       message,
       context: ctx.business,
     });
+    message.content = replyContent;
 
     logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
 
-    await channelAdapter.reply(message, replyText);
+    await channelAdapter.reply(message, replyContent.text ?? '');
   }
 }
