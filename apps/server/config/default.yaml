@@ -18,7 +18,7 @@ wechat:
 channels:
   - type: feishu
     name: feishu-openclaw
-    enabled: true
+    enabled: false
     apps:
       - appId: cli_xxx
         appSecret: xxx
@@ -28,7 +28,7 @@ channels:
         requireMention: true
   - type: feishu
     name: feishu-iris
-    enabled: true
+    enabled: false
     apps:
       - appId: cli_xxx
         appSecret: xxx
@@ -89,7 +89,7 @@ backends:
     # path: /ws/openclaw           # override if needed
 
   claude-code:
-    enabled: true
+    enabled: false
     # WS path: /ws/claude-code (default), timeout: 900000ms (15 min)
     # Run the CLI: claude-code-channel --iris-ws ws://<iris-host>:9527/ws/claude-code
 
