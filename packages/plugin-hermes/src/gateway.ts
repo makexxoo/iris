@@ -68,8 +68,8 @@ export function handleIrisMessage(params: {
         return;
       }
 
-      const { text: cleanText, files } = extractMedia(rawReply, (msg) =>
-        logger.warn({ sessionId, msg }, 'media extraction warning'),
+      const { text: cleanText, files } = extractMedia(rawReply, (warning) =>
+        logger.warn({ sessionId, warning }, 'media extraction warning'),
       );
 
       logger.info({ sessionId, files: files.length }, 'extracted media files');
