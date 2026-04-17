@@ -3,6 +3,9 @@ import { IrisMessage } from '../message';
 
 export interface ChannelAdapter {
   name: string;
+
+  support(message: IrisMessage): boolean;
+
   /**
    * Register webhook route(s) on the Fastify server, or start long-lived connections
    * (e.g. WebSocket) that feed messages into the router.

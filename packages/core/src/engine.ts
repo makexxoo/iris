@@ -11,7 +11,7 @@ const logger = pino({ name: 'iris:engine' });
 export type MessageHandler = (message: IrisMessage) => Promise<void>;
 
 export class MessageEngine {
-  private channelAdapters = new Map<string, ChannelAdapter>();
+  private channelAdapters: Array<ChannelAdapter> = [];
   private backendAdapters = new Map<string, BackendAdapter>();
 
   constructor(
@@ -20,36 +20,11 @@ export class MessageEngine {
   ) {}
 
   registerChannel(adapter: ChannelAdapter): void {
-    this.channelAdapters.set(adapter.name, adapter);
+    this.channelAdapters.push(adapter);
   }
 
   registerBackend(adapter: BackendAdapter): void {
     this.backendAdapters.set(adapter.name, adapter);
-  }
-
-  /**
-   * Deliver a reply to a user by sessionId without the original message context.
-   * Used by the /v1/outbound endpoint for proactive messages from openclaw.
-   * sessionId format: "<channel>:<channelUserId>"
-   */
-  async deliverReply(sessionId: string, text: string): Promise<void> {
-    const colonIdx = sessionId.indexOf(':');
-    if (colonIdx === -1) {
-      logger.error({ sessionId }, 'deliverReply: invalid sessionId format');
-      return;
-    }
-    const channelName = sessionId.slice(0, colonIdx);
-    const channelUserId = sessionId.slice(colonIdx + 1);
-    const channelAdapter = this.channelAdapters.get(channelName);
-    if (!channelAdapter) {
-      logger.error({ channelName, sessionId }, 'deliverReply: channel adapter not found');
-      return;
-    }
-    if (!channelAdapter.replyToUser) {
-      logger.error({ channelName }, 'deliverReply: channel adapter does not support replyToUser');
-      return;
-    }
-    await channelAdapter.replyToUser(channelUserId, text);
   }
 
   /**
@@ -87,6 +62,14 @@ export class MessageEngine {
     };
     await this.pipeline.run(ctx);
 
+    const channelAdapter = this.channelAdapters.find((item) => {
+      return item.support(message);
+    });
+    if (!channelAdapter) {
+      logger.error({ channel: message.channel }, 'channel adapter not found for reply');
+      return;
+    }
+
     // Route by channel instance name (adapter.name), fall back to default backend.
     // message.channel carries the adapter name set during registration.
     const backendName =
@@ -94,6 +77,10 @@ export class MessageEngine {
     const backend = this.backendAdapters.get(backendName);
     if (!backend) {
       logger.error({ backendName }, 'backend not found');
+      await channelAdapter.reply(
+        message,
+        `backend not found: ${backendName}. 请联系管理员为您配置智能体`,
+      );
       return;
     }
 
@@ -104,11 +91,6 @@ export class MessageEngine {
 
     logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
 
-    const channelAdapter = this.channelAdapters.get(message.channel);
-    if (!channelAdapter) {
-      logger.error({ channel: message.channel }, 'channel adapter not found for reply');
-      return;
-    }
     await channelAdapter.reply(message, replyText);
   }
 }

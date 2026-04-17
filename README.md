@@ -75,19 +75,32 @@ backends:
 npx @agent-iris/server -c config.yaml
 ```
 
-### 第三步：启动 Claude Code Channel
+### 第三步：启动 Agent 端的插件
+
+
+当前支持列表：
+
+- [x] Claude Code
+- [x] Openclaw
+
+
+#### Claude Code
 
 在另一个终端，指定工作目录启动 Claude Code 进程，连接到上一步启动的网关，启动后在飞书发送消息，Claude code 就能开始干活了：
 
 ```bash
-npx @agent-iris/claude-code-channel \
-  --iris-ws ws://127.0.0.1:9527/ws/claude-code \
-  --cwd /path/to/your/project
+# 把当前目录作为 claude code 的工作目录
+npx -y @agent-iris/claude-code-channel --iris-ws ws://127.0.0.1:9527/ws/claude-code
+ 
+# 指定claude code工作目录
+npx -y @agent-iris/claude-code-channel --iris-ws ws://127.0.0.1:9527/ws/claude-code --cwd /path/to/your/project
 ```
 
 > **说明**
 > - `--iris-ws`：Iris 网关的 WebSocket 地址，路径最后一段（`claude-code`）须与 `backends` 中的 key 一致
 > - `--cwd`：Claude Code 执行命令时的工作目录，默认为当前目录
+
+#### Openclaw
 
 ## License
 

@@ -32,10 +32,25 @@ export interface WechatChannelConfig {
   type: 'wechat';
   name: string;
   enabled?: boolean;
-  token: string;
-  appId: string;
-  appSecret: string;
-  encodingAESKey: string;
+  /**
+   * 该分组关联的微信 accountId 列表。
+   * 启动时会从磁盘加载对应凭证；路由分发时按 accountId 归属到此分组。
+   */
+  accountIds?: string[];
+}
+
+/**
+ * 顶级微信模块配置（全局单例）。
+ * 控制 HTTP 路由注册、数据目录等基础设施，与具体 channel 分组无关。
+ */
+export interface WechatGlobalConfig {
+  /** 是否启用微信模块（HTTP 路由 + 账号加载）。默认 true。 */
+  enabled?: boolean;
+  /**
+   * 账号凭证持久化目录。
+   * 默认 ~/.iris/wechat/accounts/
+   */
+  dataDir?: string;
 }
 
 export type ChannelConfig = FeishuChannelConfig | TelegramChannelConfig | WechatChannelConfig;
@@ -46,6 +61,9 @@ export type ChannelConfig = FeishuChannelConfig | TelegramChannelConfig | Wechat
 
 export interface IrisConfig {
   server: { port: number };
+
+  /** 顶级微信模块全局配置 */
+  wechat?: WechatGlobalConfig;
 
   /** All channel instances as an array. Each entry has a unique `name` and a `type`. */
   channels: ChannelConfig[];
