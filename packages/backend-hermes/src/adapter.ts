@@ -1,9 +1,50 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
-import type { BackendAdapter, BackendRequest, MessageContent } from '@agent-iris/core';
+import type { BackendAdapter, BackendRequest, MessageContent, MessageAttachment } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-hermes' });
+
+function mimeToAttachmentType(mime: string): MessageAttachment['type'] {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+function parseReplyContent(msg: Record<string, unknown>): MessageContent {
+  // New format: content array
+  if (Array.isArray(msg['content'])) {
+    const parts = msg['content'] as Array<Record<string, unknown>>;
+    const text = parts
+      .filter((p) => p['type'] === 'text')
+      .map((p) => String(p['text'] ?? ''))
+      .join('');
+    const attachments: MessageAttachment[] = parts
+      .filter((p) => p['type'] === 'image_url')
+      .map((p) => {
+        const imageUrl = (p['image_url'] as Record<string, unknown>) ?? {};
+        const url = String(imageUrl['url'] ?? '');
+        const detail = String(imageUrl['detail'] ?? 'file');
+        // url format: data:<mime>;base64,<data>
+        const commaIdx = url.indexOf(',');
+        const meta = commaIdx >= 0 ? url.slice(0, commaIdx) : '';
+        const base64 = commaIdx >= 0 ? url.slice(commaIdx + 1) : '';
+        const mimeType = meta.replace('data:', '').replace(';base64', '');
+        return {
+          type: mimeToAttachmentType(mimeType),
+          fileName: detail,
+          mimeType,
+          base64,
+        } satisfies MessageAttachment;
+      });
+    const type = attachments.length > 0 ? attachments[0].type : 'text';
+    return { type, text, attachments: attachments.length > 0 ? attachments : undefined };
+  }
+
+  // Old format fallback: text field
+  return { type: 'text', text: String(msg['text'] ?? '') };
+}
 
 export interface HermesBackendConfig {
   name?: string;
@@ -14,7 +55,7 @@ export interface HermesBackendConfig {
 }
 
 interface PendingReply {
-  resolve: (text: string) => void;
+  resolve: (content: MessageContent) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -77,17 +118,19 @@ export class HermesBackend implements BackendAdapter {
     }
     if (!msg || typeof msg !== 'object') return;
 
-    const { type, sessionId, text } = msg as Record<string, unknown>;
-    if (type === 'reply' && typeof sessionId === 'string' && typeof text === 'string') {
-      const pending = this.pending.get(sessionId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(sessionId);
-        pending.resolve(text);
-      } else {
-        logger.warn({ sessionId }, 'received reply for unknown session');
-      }
+    const m = msg as Record<string, unknown>;
+    if (m['type'] !== 'reply' || typeof m['sessionId'] !== 'string') return;
+
+    const sessionId = m['sessionId'] as string;
+    const pending = this.pending.get(sessionId);
+    if (!pending) {
+      logger.warn({ sessionId }, 'received reply for unknown session');
+      return;
     }
+
+    clearTimeout(pending.timer);
+    this.pending.delete(sessionId);
+    pending.resolve(parseReplyContent(m));
   }
 
   async chat(req: BackendRequest): Promise<MessageContent> {
@@ -121,7 +164,7 @@ export class HermesBackend implements BackendAdapter {
       context: req.context,
     });
 
-    const text = await new Promise<string>((resolve, reject) => {
+    return new Promise<MessageContent>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(sessionId);
         reject(new Error(`hermes: reply timeout for session ${sessionId}`));
@@ -137,7 +180,6 @@ export class HermesBackend implements BackendAdapter {
         }
       });
     });
-    return { type: 'text', text };
   }
 
   close(): void {
