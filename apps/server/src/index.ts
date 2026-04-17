@@ -10,6 +10,7 @@ import {
   PluginPipeline,
 } from '@agent-iris/core';
 import { FeishuAdapter } from '@agent-iris/channel-feishu';
+import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wechat';
 import { OpenclawChannelBackend } from '@agent-iris/backend-openclaw-channel';
 import { ClaudeCodeChannelBackend } from '@agent-iris/backend-claude-code-channel';
 import { MemberInfoPlugin } from '@agent-iris/plugin-member-info';
@@ -71,6 +72,18 @@ async function main() {
   // --- Channel adapters (array form) ---
   const activeChannels: ChannelAdapter[] = [];
 
+  // 顶级 wechat 配置 → 创建单例 WechatAdapter（注册 HTTP 路由）
+  let wechatAdapter: WechatAdapter | undefined;
+  if (config.wechat?.enabled !== false) {
+    wechatAdapter = new WechatAdapter(config.wechat ?? {}, router.handle);
+    router.registerChannel(wechatAdapter);
+    activeChannels.push(wechatAdapter);
+    logger.info('wechat: global adapter created');
+  }
+
+  // 收集 wechat channel 分组，稍后在 HTTP server 启动前加载账号
+  const wechatGroups: WechatChannelGroup[] = [];
+
   for (const channelCfg of config.channels) {
     if (channelCfg.enabled === false) continue;
 
@@ -86,13 +99,26 @@ async function main() {
         break;
       }
       case 'telegram': {
-        // TODO: import TelegramAdapter when available
         logger.warn({ name: channelCfg.name }, 'telegram channel not yet implemented, skipping');
         break;
       }
       case 'wechat': {
-        // TODO: import WechatAdapter when available
-        logger.warn({ name: channelCfg.name }, 'wechat channel not yet implemented, skipping');
+        if (!wechatAdapter) {
+          logger.warn(
+            { name: channelCfg.name },
+            'wechat: global wechat module is disabled, skipping channel group',
+          );
+          break;
+        }
+        wechatGroups.push({
+          name: channelCfg.name,
+          enabled: channelCfg.enabled,
+          accountIds: channelCfg.accountIds,
+        });
+        logger.info(
+          { name: channelCfg.name, type: channelCfg.type },
+          'wechat channel group queued',
+        );
         break;
       }
       default: {
@@ -101,8 +127,16 @@ async function main() {
     }
   }
 
+  if (wechatAdapter && wechatGroups.length > 0) {
+    await wechatAdapter.init(wechatGroups);
+  }
+
   // --- HTTP server ---
-  const server = createServer(activeChannels, router);
+  const server = createServer(router);
+
+  for (const channel of activeChannels) {
+    channel.register(server);
+  }
 
   // Attach WS backends to the shared HTTP server (no separate port needed)
   openclawChannelBackend?.attach(server.server);

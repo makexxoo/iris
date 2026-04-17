@@ -1,7 +1,18 @@
 server:
   port: 9527
 
-plugins: []
+plugins: [ ]
+
+
+# ---------------------------------------------------------------------------
+# 微信模块配置（全局单例）
+# 控制 HTTP 路由注册（/wechat/qr/*）和账号凭证存储目录
+# ---------------------------------------------------------------------------
+wechat:
+  enabled: true
+  # dataDir: ~/.iris/wechat/accounts   # 凭证持久化目录，默认 ~/.iris
+
+
 
 # channels 数组形式，每个 channel 有 type（适配器类型）和 name（唯一实例名）
 channels:
@@ -25,6 +36,13 @@ channels:
         groupPolicy: "open"
         streaming: true
         requireMention: true
+  # 微信分组：仅做路由分发分组，accountIds 指定该分组关联的账号
+  # backends.routes 中用 name 做路由 key
+  - type: wechat
+    name: wechat-main
+    enabled: true
+    accountIds:
+    # - "xxxx@im.bot"   # 扫码登录后获得的 accountId
 
 
 backends:
@@ -39,6 +57,8 @@ backends:
   routes:
     feishu-openclaw: openclaw
     feishu-iris: claude-code
+    # 不再channel中定义的微信用户，默认转发渠道
+    wechat-default: openclaw
     # feishu-support: openclaw
     # telegram-main: claude-code
 
