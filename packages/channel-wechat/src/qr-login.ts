@@ -164,7 +164,7 @@ export async function pollQrStatusOnce(qrcode: string, baseUrl: string): Promise
 // ---------------------------------------------------------------------------
 
 function accountFilePath(dataDir: string, accountId: string): string {
-  return path.join(dataDir, 'wechat', 'accounts', `${accountId}.json`);
+  return path.join(dataDir, `${accountId}.json`);
 }
 
 export async function saveCredential(dataDir: string, credential: WechatCredential): Promise<void> {
@@ -305,5 +305,5 @@ export async function runQrLogin(options: QrLoginOptions = {}): Promise<WechatCr
 }
 
 export function defaultDataDir(): string {
-  return path.join(process.env['HOME'] ?? process.cwd(), '.iris');
+  return path.join(process.env['HOME'] ?? process.cwd(), '.iris', 'wechat', 'accounts');
 }
