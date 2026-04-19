@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import axios, { AxiosError } from 'axios';
 import pino from 'pino';
 import type { IrisMessage, MessageHandler } from '@agent-iris/core';
-import { uploadAndBuildItem, type SendFileParams } from './ilink-media.js';
+import { type SendFileParams, uploadAndBuildItem } from './ilink-media.js';
 
 const logger = pino({ name: 'channel-wechat:account' });
 
@@ -165,7 +165,12 @@ export class AccountConnection {
     });
   }
 
-  async sendFile(toUserId: string, fileBytes: Buffer, fileName: string, mimeType: string): Promise<void> {
+  async sendFile(
+    toUserId: string,
+    fileBytes: Buffer,
+    fileName: string,
+    mimeType: string,
+  ): Promise<void> {
     const contextToken = this.contextTokens.get(toUserId) ?? null;
     const clientId = `iris-wechat-${randomUUID().replace(/-/g, '')}`;
     const params: SendFileParams = {
@@ -365,6 +370,11 @@ export class AccountConnection {
 
     logger.info({ accountId: safeId(this.accountId), from: safeId(senderId) }, 'inbound message');
 
+    try {
+      await this.sendText(senderId, 'OK');
+    } catch (e) {
+      /* empty */
+    }
     this.onMessage(irisMessage);
   }
 
