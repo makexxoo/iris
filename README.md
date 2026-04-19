@@ -72,7 +72,7 @@ backends:
 ### 第二步：启动 Iris 消息网关
 
 ```bash
-npx @agent-iris/server -c config.yaml
+npx @agent-iris/server@latest -c config.yaml
 ```
 
 ### 第三步：启动 Agent 端的插件

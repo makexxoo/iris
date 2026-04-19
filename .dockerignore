@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.git
+**/.git
+dist
+**/dist
+*.tsbuildinfo
+.env
+**/.env
+.DS_Store
+
+src/**/*.d.ts
+src/**/*.d.ts.map

@@ -99,10 +99,9 @@ export interface IrisConfig {
 
 export function loadConfig(configPath?: string): IrisConfig {
   const filePath = configPath ?? path.resolve(process.cwd(), 'config/default.yaml');
+  console.log(`Loading config file: ${filePath}`);
 
-  // Load .env from the repo root (two levels above config/default.yaml).
-  // override: false — bun or the shell may have already set vars; don't clobber them.
-  const envPath = path.resolve(path.dirname(filePath), '../../.env');
+  const envPath = path.resolve(process.cwd(), '.env');
   dotenv.config({ path: envPath, override: false });
 
   const raw = fs.readFileSync(filePath, 'utf8');
