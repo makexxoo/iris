@@ -1,7 +1,7 @@
 // packages/plugin-hermes/src/gateway.ts
 import type { SessionManager } from './session';
-import { queryHermes, type HermesConfig, type IrisWsMessage } from './hermes';
-import { extractMedia, type ExtractedFile } from './media';
+import { type HermesConfig, type IrisWsMessage, queryHermes } from './hermes';
+import { type ExtractedFile, extractMedia } from './media';
 import { logger } from './logger';
 
 interface TextPart {
@@ -58,10 +58,11 @@ export function handleIrisMessage(params: {
       return;
     }
 
-    logger.info({ sessionId, channel: msg.channel, text: text.slice(0, 80) }, 'handling iris message');
+    logger.info({ sessionId, channel: msg.channel, text: text }, 'handling iris message');
 
     try {
       const rawReply = await queryHermes(msg, hermesConfig);
+      logger.info({ sessionId, channel: msg.channel, text: rawReply });
 
       if (rawReply === null || rawReply === undefined) {
         logger.warn({ sessionId }, 'hermes returned empty result, skipping reply');
