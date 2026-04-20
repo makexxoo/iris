@@ -200,7 +200,7 @@ export async function loadCredential(
 }
 
 export async function listSavedAccounts(dataDir: string): Promise<Map<string, WechatCredential>> {
-  const dir = path.join(dataDir, 'wechat', 'accounts');
+  const dir = path.join(dataDir);
   const results: Map<string, WechatCredential> = new Map();
   try {
     const files = await fs.readdir(dir);
@@ -210,12 +210,12 @@ export async function listSavedAccounts(dataDir: string): Promise<Map<string, We
         const raw = await fs.readFile(path.join(dir, f), 'utf8');
         const cred = JSON.parse(raw) as WechatCredential;
         results.set(cred.accountId, cred);
-      } catch {
-        // skip corrupted files
+      } catch (e) {
+        logger.error({ error: e }, `Error read account: ${e} [${f}]`);
       }
     }
-  } catch {
-    /* empty */
+  } catch (e) {
+    logger.error({ error: e }, 'error list accounts');
   }
   return results;
 }
