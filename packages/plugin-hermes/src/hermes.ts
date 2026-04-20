@@ -28,10 +28,7 @@ export interface IrisWsMessage {
  * hermes-agent maintains conversation history keyed by X-Hermes-Session-Id,
  * so we pass the iris sessionId to preserve per-user context across turns.
  */
-export async function queryHermes(
-  msg: IrisWsMessage,
-  config: HermesConfig,
-): Promise<string> {
+export async function queryHermes(msg: IrisWsMessage, config: HermesConfig): Promise<string> {
   const { baseUrl, apiKey, model = 'hermes', timeoutMs = 300_000 } = config;
 
   const text = msg.content.text ?? '';
@@ -82,6 +79,7 @@ export async function queryHermes(
   }
 
   const data = (await response.json()) as any;
+  logger.info({ data }, '智能体返回的完整数据');
   const reply: string = data?.choices?.[0]?.message?.content ?? '';
 
   if (!reply) {

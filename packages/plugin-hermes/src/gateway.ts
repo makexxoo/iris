@@ -62,7 +62,7 @@ export function handleIrisMessage(params: {
 
     try {
       const rawReply = await queryHermes(msg, hermesConfig);
-      logger.info({ sessionId, channel: msg.channel, text: rawReply });
+      logger.info({ sessionId, channel: msg.channel, text: rawReply }, '智能体返回的文本');
 
       if (rawReply === null || rawReply === undefined) {
         logger.warn({ sessionId }, 'hermes returned empty result, skipping reply');
