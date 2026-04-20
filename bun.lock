@@ -16,7 +16,7 @@
     },
     "apps/server": {
       "name": "@agent-iris/server",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "agent-iris-server": "./dist/index.js",
       },
@@ -109,10 +109,12 @@
         "ioredis": "^5.4.1",
         "js-yaml": "^4.1.0",
         "pino": "^9.3.2",
+        "ws": "^8.18.3",
         "zod": "^3.23.8",
       },
       "devDependencies": {
         "@types/js-yaml": "^4.0.9",
+        "@types/ws": "^8.18.1",
       },
     },
     "packages/plugin-claude-code": {
@@ -132,7 +134,7 @@
     },
     "packages/plugin-hermes": {
       "name": "@agent-iris/hermes-agent-channel",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "bin": {
         "hermes-plugin": "./dist/index.js",
       },

@@ -1,7 +1,15 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
-import type { BackendAdapter, BackendRequest, MessageContent, MessageAttachment } from '@agent-iris/core';
+import type {
+  BackendRequest,
+  InboundReplyMessage,
+  MessageAttachment,
+  MessageContent,
+  ReplyTimeoutContext,
+  UnknownReplyContext,
+} from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-hermes' });
 
@@ -54,12 +62,6 @@ export interface HermesBackendConfig {
   path?: string;
 }
 
-interface PendingReply {
-  resolve: (content: MessageContent) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 /**
  * Backend adapter that connects to the hermes-agent plugin (plugin-hermes) via WebSocket.
  *
@@ -71,119 +73,113 @@ interface PendingReply {
  *   plugin → iris (WS): { type: 'reply', sessionId, content: ContentPart[] }
  *                    or (legacy): { type: 'reply', sessionId, text: string }
  */
-export class HermesBackend implements BackendAdapter {
-  private wss: WebSocketServer | null = null;
-  private connections = new Set<WebSocket>();
-  private pending = new Map<string, PendingReply>();
-  private readonly timeoutMs: number;
+export class HermesBackend extends WebSocketSessionBackend {
+  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
+
   private readonly path: string;
 
   name = 'hermes';
 
   constructor(config: HermesBackendConfig) {
+    const timeoutMs = config.timeoutMs ?? 300_000;
+    super(timeoutMs, HermesBackend.SESSION_IDLE_TTL_MS);
     this.name = config.name ?? 'hermes';
-    this.timeoutMs = config.timeoutMs ?? 300_000;
     this.path = config.path ?? '/ws/hermes';
   }
 
   /** Attach the WS handler to an existing HTTP server. Call before listen(). */
   attach(httpServer: Server<typeof IncomingMessage>): void {
-    this.wss = new WebSocketServer({ server: httpServer, path: this.path });
-
-    this.wss.on('connection', (ws) => {
-      logger.info('plugin-hermes connected');
-      this.connections.add(ws);
-
-      ws.on('message', (raw) => this.handleMessage(raw.toString()));
-
-      ws.on('close', () => {
-        logger.info('plugin-hermes disconnected');
-        this.connections.delete(ws);
-      });
-
-      ws.on('error', (err) => {
-        logger.warn({ err }, 'plugin-hermes WS error');
-        this.connections.delete(ws);
-      });
-    });
-
-    logger.info({ path: this.path }, 'hermes WS handler attached');
+    this.attachWs(httpServer, this.path);
   }
 
-  private handleMessage(raw: string): void {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!msg || typeof msg !== 'object') return;
-
-    const m = msg as Record<string, unknown>;
-    if (m['type'] !== 'reply' || typeof m['sessionId'] !== 'string') return;
-
-    const sessionId = m['sessionId'] as string;
-    const pending = this.pending.get(sessionId);
-    if (!pending) {
-      logger.warn({ sessionId }, 'received reply for unknown session');
-      return;
-    }
-
-    clearTimeout(pending.timer);
-    this.pending.delete(sessionId);
-    pending.resolve(parseReplyContent(m));
-  }
-
-  async chat(req: BackendRequest): Promise<MessageContent> {
+  protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    const sessionId = message.sessionId;
-
-    if (!this.wss) {
-      throw new Error('hermes: WS server not attached — call attach() before sending messages');
-    }
-
-    let targetWs: WebSocket | null = null;
-    for (const ws of this.connections) {
-      if (ws.readyState === WebSocket.OPEN) {
-        targetWs = ws;
-        break;
-      }
-    }
-
-    if (!targetWs) {
-      throw new Error('hermes: no connected plugin-hermes instance — is it running?');
-    }
-
-    const payload = JSON.stringify({
+    return JSON.stringify({
       type: 'message',
       id: message.id,
       channel: message.channel,
       channelUserId: message.channelUserId,
-      sessionId,
+      sessionId: message.sessionId,
       content: message.content,
       timestamp: message.timestamp,
       context: req.context,
     });
+  }
 
-    return new Promise<MessageContent>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(sessionId);
-        reject(new Error(`hermes: reply timeout for session ${sessionId}`));
-      }, this.timeoutMs);
+  protected parseInboundMessage(raw: string): InboundReplyMessage | null {
+    let msg: unknown;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (!msg || typeof msg !== 'object') return null;
+    const m = msg as Record<string, unknown>;
+    const type = m['type'];
+    if (type !== 'reply' && type !== 'reply_update') return null;
+    const sessionId = typeof m['sessionId'] === 'string' ? (m['sessionId'] as string) : '';
+    if (!sessionId) return null;
+    const requestId = String(m['requestId'] ?? m['replyTo'] ?? m['messageId'] ?? '').trim();
+    return {
+      type,
+      sessionId,
+      requestId: requestId || undefined,
+      content: parseReplyContent(m),
+    };
+  }
 
-      this.pending.set(sessionId, { resolve, reject, timer });
+  protected noConnectionErrorMessage(): string {
+    if (!this.isWsAttached()) {
+      return 'hermes: WS server not attached — call attach() before sending messages';
+    }
+    return 'hermes: no connected plugin-hermes instance — is it running?';
+  }
 
-      (targetWs as WebSocket).send(payload, (err) => {
-        if (err) {
-          clearTimeout(timer);
-          this.pending.delete(sessionId);
-          reject(new Error(`hermes: failed to send message: ${err.message}`));
-        }
+  protected async onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void> {
+    const { sessionId, requestId, message, channelAdapter } = ctx;
+    logger.warn({ sessionId, requestId }, 'hermes: reply timeout');
+    try {
+      await channelAdapter.reply({
+        ...message,
+        timestamp: Date.now(),
+        content: {
+          type: 'text',
+          text: `hermes: reply timeout for session ${sessionId}`,
+        },
       });
-    });
+    } catch (err) {
+      logger.warn({ err, sessionId, requestId }, 'failed to send timeout reply');
+    }
+  }
+
+  protected onUnknownReply(ctx: UnknownReplyContext): void {
+    logger.warn(
+      { sessionId: ctx.sessionId, requestId: ctx.requestId },
+      'received reply for unknown request',
+    );
+  }
+
+  protected onWsAttached(path: string): void {
+    logger.info({ path }, 'hermes WS handler attached');
+  }
+
+  protected onWsConnected(_connection: WebSocket): void {
+    logger.info('plugin-hermes connected');
+  }
+
+  protected onWsDisconnected(_connection: WebSocket): void {
+    logger.info('plugin-hermes disconnected');
+  }
+
+  protected onWsError(_connection: WebSocket, err: unknown): void {
+    logger.warn({ err }, 'plugin-hermes WS error');
+  }
+
+  protected formatSendError(errorMessage: string): string {
+    return `hermes: failed to send message: ${errorMessage}`;
   }
 
   close(): void {
-    this.wss?.close();
+    this.closeWs();
   }
 }

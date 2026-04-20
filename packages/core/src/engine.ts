@@ -29,10 +29,7 @@ export class MessageEngine {
 
   /**
    * Main entry point — called by each channel adapter after parsing.
-   * Orchestrates: session load → plugin pipeline → backend → reply.
-   *
-   * The backend's chat() blocks until the reply is ready (WebSocket backends
-   * await the WS response internally; REST backends await the HTTP response).
+   * Orchestrates: session load → plugin pipeline → backend dispatch.
    */
   handle = async (message: IrisMessage): Promise<void> => {
     try {
@@ -65,6 +62,7 @@ export class MessageEngine {
     const channelAdapter = this.channelAdapters.find((item) => {
       return item.support(message);
     });
+
     if (!channelAdapter) {
       logger.error({ channel: message.channel }, 'channel adapter not found for reply');
       return;
@@ -86,14 +84,23 @@ export class MessageEngine {
     }
 
     try {
-      message.content = await backend.chat({
+      const reply = await backend.chat({
         message,
         context: ctx.business,
+        channelAdapter,
       });
 
-      logger.info({ channel: message.channel, backendName }, 'got reply, sending back');
-
-      await channelAdapter.reply(message);
+      // Async backend may already send the reply via channelAdapter.reply().
+      if (reply) {
+        message.content = reply;
+        logger.info({ channel: message.channel, backendName }, 'got sync reply, sending back');
+        await channelAdapter.reply(message);
+      } else {
+        logger.info(
+          { channel: message.channel, backendName },
+          'backend accepted message in async mode',
+        );
+      }
     } catch (e) {
       logger.info({ channel: message.channel, backendName, error: e }, '智能体处理失败');
       message.content = {

@@ -1,4 +1,13 @@
-export type MessageContentType = 'text' | 'image' | 'voice' | 'file' | 'audio' | 'video' | 'unknown';
+import { ChannelAdapter } from './channels/types';
+
+export type MessageContentType =
+  | 'text'
+  | 'image'
+  | 'voice'
+  | 'file'
+  | 'audio'
+  | 'video'
+  | 'unknown';
 
 export interface MessageAttachment {
   type: 'image' | 'file' | 'audio' | 'video';
@@ -47,4 +56,10 @@ export interface BackendRequest {
   message: IrisMessage;
   /** Aggregated business context injected by plugins */
   context: Record<string, unknown>;
+
+  /**
+   * Current channel adapter. Async backends can call channelAdapter.reply()
+   * directly when the downstream reply arrives.
+   */
+  channelAdapter: ChannelAdapter;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@agent-iris/hermes-agent-channel",
-  "version": "0.1.3",
+  "version": "0.1.7",
   "description": "hermes-agent plugin for agent-iris — connects iris server to hermes-agent via WebSocket",
   "type": "module",
   "main": "./dist/index.js",

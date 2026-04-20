@@ -12,9 +12,11 @@
     "ioredis": "^5.4.1",
     "js-yaml": "^4.1.0",
     "pino": "^9.3.2",
+    "ws": "^8.18.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "@types/js-yaml": "^4.0.9"
   }
 }

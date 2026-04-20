@@ -2,9 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createServer } from 'http';
 import WebSocket from 'ws';
 import { ClaudeCodeChannelBackend } from './adapter';
-import type { BackendRequest } from '@agent-iris/core';
+import type { BackendRequest, ChannelAdapter, IrisMessage } from '@agent-iris/core';
 
-function makeRequest(sessionId: string): BackendRequest {
+function makeRequest(
+  sessionId: string,
+  onReply?: (message: IrisMessage) => void,
+): BackendRequest & { channelAdapter: ChannelAdapter } {
   return {
     message: {
       id: 'msg-1',
@@ -16,6 +19,12 @@ function makeRequest(sessionId: string): BackendRequest {
       raw: {},
     },
     context: {},
+    channelAdapter: {
+      name: 'mock-channel',
+      support: () => true,
+      register: () => undefined,
+      reply: async (message) => onReply?.(message),
+    },
   };
 }
 
@@ -35,28 +44,41 @@ describe('ClaudeCodeChannelBackend', () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
-  it('resolves chat() when CLI sends reply', async () => {
+  it('forwards CLI reply via channelAdapter.reply()', async () => {
     const port = (httpServer.address() as { port: number }).port;
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/claude-code`);
     await new Promise<void>((resolve) => ws.on('open', resolve));
 
-    const chatPromise = backend.chat(makeRequest('session-1'));
+    let replyText = '';
+    await backend.chat(
+      makeRequest('session-1', (message) => {
+        replyText = message.content.text ?? '';
+      }),
+    );
 
     // Simulate CLI sending back a reply
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
     ws.send(JSON.stringify({ type: 'reply', sessionId: 'session-1', text: 'hello back' }));
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
-    const result = await chatPromise;
-    expect(result).toEqual({ type: 'text', text: 'hello back' });
+    expect(replyText).toEqual('hello back');
     ws.close();
   });
 
-  it('rejects chat() after timeout', async () => {
+  it('sends timeout text via channelAdapter.reply()', async () => {
     const port = (httpServer.address() as { port: number }).port;
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/claude-code`);
     await new Promise<void>((resolve) => ws.on('open', resolve));
 
-    await expect(backend.chat(makeRequest('session-timeout'))).rejects.toThrow('timeout');
+    let replyText = '';
+    await backend.chat(
+      makeRequest('session-timeout', (message) => {
+        replyText = message.content.text ?? '';
+      }),
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 550));
+
+    expect(replyText).toContain('timeout');
     ws.close();
   });
 

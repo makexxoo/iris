@@ -1,7 +1,13 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
-import { BackendAdapter, BackendRequest, MessageContent } from '@agent-iris/core';
+import type {
+  BackendRequest,
+  InboundReplyMessage,
+  ReplyTimeoutContext,
+  UnknownReplyContext,
+} from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-openclaw' });
 
@@ -12,12 +18,6 @@ export interface OpenclawChannelConfig {
   timeoutMs?: number;
   /** WS path to listen on (default: /ws/openclaw). Set explicitly when running multiple WS backends. */
   path?: string;
-}
-
-interface PendingReply {
-  resolve: (text: string) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 /**
@@ -32,18 +32,17 @@ interface PendingReply {
  *
  * chat() blocks until the reply arrives or the timeout fires.
  */
-export class OpenclawChannelBackend implements BackendAdapter {
-  private wss: WebSocketServer | null = null;
-  private connections = new Set<WebSocket>();
-  private pending = new Map<string, PendingReply>();
-  private readonly timeoutMs: number;
+export class OpenclawChannelBackend extends WebSocketSessionBackend {
+  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
+
   private readonly path: string;
 
   name = 'openclaw';
 
   constructor(private config: OpenclawChannelConfig) {
+    const timeoutMs = config.timeoutMs ?? 60_000;
+    super(timeoutMs, OpenclawChannelBackend.SESSION_IDLE_TTL_MS);
     this.name = config.name ?? 'openclaw';
-    this.timeoutMs = config.timeoutMs ?? 60_000;
     this.path = config.path ?? '/ws/openclaw';
   }
 
@@ -52,107 +51,91 @@ export class OpenclawChannelBackend implements BackendAdapter {
    * Call this after the Fastify server is created, before listen().
    */
   attach(httpServer: Server<typeof IncomingMessage>): void {
-    this.wss = new WebSocketServer({ server: httpServer, path: this.path });
-
-    this.wss.on('connection', (ws) => {
-      logger.info('openclaw plugin connected');
-      this.connections.add(ws);
-
-      ws.on('message', (raw) => this.handleMessage(raw.toString()));
-
-      ws.on('close', () => {
-        logger.info('openclaw plugin disconnected');
-        this.connections.delete(ws);
-      });
-
-      ws.on('error', (err) => {
-        logger.warn({ err }, 'openclaw plugin WS error');
-        this.connections.delete(ws);
-      });
-    });
-
-    logger.info({ path: this.path }, 'openclaw WS handler attached');
+    this.attachWs(httpServer, this.path);
   }
 
-  private handleMessage(raw: string): void {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!msg || typeof msg !== 'object') return;
-
-    const { type, sessionId, text } = msg as Record<string, unknown>;
-
-    if (type === 'reply' && typeof sessionId === 'string' && typeof text === 'string') {
-      const pending = this.pending.get(sessionId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(sessionId);
-        pending.resolve(text);
-      } else {
-        logger.warn({ sessionId }, 'received reply for unknown session');
-      }
-    }
-  }
-
-  async chat(req: BackendRequest): Promise<MessageContent> {
+  protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    const sessionId = message.sessionId;
-
-    // Find the first open connection
-    let targetWs: WebSocket | null = null;
-    for (const ws of this.connections) {
-      if (ws.readyState === WebSocket.OPEN) {
-        targetWs = ws;
-        break;
-      }
-    }
-
-    if (!this.wss) {
-      throw new Error(
-        'openclaw-channel: WS server not attached — call attach() before sending messages',
-      );
-    }
-
-    if (!targetWs) {
-      throw new Error(
-        'openclaw-channel: no connected openclaw instances — is the openclaw iris plugin running?',
-      );
-    }
-
-    const payload = JSON.stringify({
+    return JSON.stringify({
       type: 'message',
       id: message.id,
       channel: message.channel,
       channelUserId: message.channelUserId,
-      sessionId,
+      sessionId: message.sessionId,
       content: message.content,
       timestamp: message.timestamp,
       context: req.context,
     });
+  }
 
-    const replyText = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(sessionId);
-        reject(new Error(`openclaw: reply timeout for session ${sessionId}`));
-      }, this.timeoutMs);
+  protected parseInboundMessage(raw: string): InboundReplyMessage | null {
+    let msg: unknown;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (!msg || typeof msg !== 'object') return null;
+    const payload = msg as Record<string, unknown>;
+    const type = payload['type'];
+    const sessionId = payload['sessionId'];
+    if ((type !== 'reply' && type !== 'reply_update') || typeof sessionId !== 'string') return null;
+    return {
+      type,
+      sessionId,
+      content: {
+        type: 'text',
+        text: typeof payload['text'] === 'string' ? (payload['text'] as string) : '',
+      },
+    };
+  }
 
-      this.pending.set(sessionId, { resolve, reject, timer });
+  protected noConnectionErrorMessage(): string {
+    if (!this.isWsAttached()) {
+      return 'openclaw-channel: WS server not attached — call attach() before sending messages';
+    }
+    return 'openclaw-channel: no connected openclaw instances — is the openclaw iris plugin running?';
+  }
 
-      (targetWs as WebSocket).send(payload, (err) => {
-        if (err) {
-          clearTimeout(timer);
-          this.pending.delete(sessionId);
-          reject(new Error(`openclaw-channel: failed to send message: ${err.message}`));
-        }
+  protected async onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void> {
+    const { sessionId, message, channelAdapter } = ctx;
+    logger.warn({ sessionId }, 'openclaw-channel: reply timeout');
+    try {
+      await channelAdapter.reply({
+        ...message,
+        timestamp: Date.now(),
+        content: { type: 'text', text: `openclaw: reply timeout for session ${sessionId}` },
       });
-    });
-    return { type: 'text', text: replyText };
+    } catch (err) {
+      logger.warn({ err, sessionId }, 'failed to send timeout reply');
+    }
+  }
+
+  protected onUnknownReply(ctx: UnknownReplyContext): void {
+    logger.warn({ sessionId: ctx.sessionId }, 'received reply for unknown session');
+  }
+
+  protected onWsAttached(path: string): void {
+    logger.info({ path }, 'openclaw WS handler attached');
+  }
+
+  protected onWsConnected(_connection: WebSocket): void {
+    logger.info('openclaw plugin connected');
+  }
+
+  protected onWsDisconnected(_connection: WebSocket): void {
+    logger.info('openclaw plugin disconnected');
+  }
+
+  protected onWsError(_connection: WebSocket, err: unknown): void {
+    logger.warn({ err }, 'openclaw plugin WS error');
+  }
+
+  protected formatSendError(errorMessage: string): string {
+    return `openclaw-channel: failed to send message: ${errorMessage}`;
   }
 
   close(): void {
-    this.wss?.close();
+    this.closeWs();
   }
 }

@@ -1,7 +1,13 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
-import type { BackendAdapter, BackendRequest, MessageContent } from '@agent-iris/core';
+import type {
+  BackendRequest,
+  InboundReplyMessage,
+  ReplyTimeoutContext,
+  UnknownReplyContext,
+} from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-claude-code' });
 
@@ -14,12 +20,6 @@ export interface ClaudeCodeChannelConfig {
   path?: string;
 }
 
-interface PendingReply {
-  resolve: (text: string) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 /**
  * Backend adapter that connects to a claude-code-channel CLI via WebSocket.
  *
@@ -29,120 +29,107 @@ interface PendingReply {
  *   iris → CLI: { type: 'message', id, channel, channelUserId, sessionId, content, timestamp, context }
  *   CLI → iris: { type: 'reply', sessionId, text }
  */
-export class ClaudeCodeChannelBackend implements BackendAdapter {
-  private wss: WebSocketServer | null = null;
-  private connections = new Set<WebSocket>();
-  private pending = new Map<string, PendingReply>();
-  private readonly timeoutMs: number;
+export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
+  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
+
   private readonly path: string;
 
   name = 'claude-code';
 
   constructor(private config: ClaudeCodeChannelConfig) {
+    const timeoutMs = config.timeoutMs ?? 900_000;
+    super(timeoutMs, ClaudeCodeChannelBackend.SESSION_IDLE_TTL_MS);
     this.name = config.name ?? 'claude-code';
-    this.timeoutMs = config.timeoutMs ?? 900_000;
     this.path = config.path ?? '/ws/claude-code';
   }
 
   /** Attach the WS handler to an existing HTTP server. Call before listen(). */
   attach(httpServer: Server<typeof IncomingMessage>): void {
-    this.wss = new WebSocketServer({ server: httpServer, path: this.path });
-
-    this.wss.on('connection', (ws) => {
-      logger.info('claude-code-channel CLI connected');
-      this.connections.add(ws);
-
-      ws.on('message', (raw) => this.handleMessage(raw.toString()));
-
-      ws.on('close', () => {
-        logger.info('claude-code-channel CLI disconnected');
-        this.connections.delete(ws);
-      });
-
-      ws.on('error', (err) => {
-        logger.warn({ err }, 'claude-code-channel WS error');
-        this.connections.delete(ws);
-      });
-    });
-
-    logger.info({ path: this.path }, 'claude-code WS handler attached');
+    this.attachWs(httpServer, this.path);
   }
 
-  private handleMessage(raw: string): void {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!msg || typeof msg !== 'object') return;
-
-    const { type, sessionId, text } = msg as Record<string, unknown>;
-    if (type === 'reply' && typeof sessionId === 'string' && typeof text === 'string') {
-      const pending = this.pending.get(sessionId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(sessionId);
-        pending.resolve(text);
-      } else {
-        logger.warn({ sessionId }, 'received reply for unknown session');
-      }
-    }
-  }
-
-  async chat(req: BackendRequest): Promise<MessageContent> {
+  protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    const sessionId = message.sessionId;
-
-    if (!this.wss) {
-      throw new Error(
-        'claude-code-channel: WS server not attached — call attach() before sending messages',
-      );
-    }
-
-    let targetWs: WebSocket | null = null;
-    for (const ws of this.connections) {
-      if (ws.readyState === WebSocket.OPEN) {
-        targetWs = ws;
-        break;
-      }
-    }
-
-    if (!targetWs) {
-      throw new Error('claude-code-channel: no connected claude-code-channel CLI — is it running?');
-    }
-
-    const payload = JSON.stringify({
+    return JSON.stringify({
       type: 'message',
       id: message.id,
       channel: message.channel,
       channelUserId: message.channelUserId,
-      sessionId,
+      sessionId: message.sessionId,
       content: message.content,
       timestamp: message.timestamp,
       context: req.context,
     });
+  }
 
-    const replyText = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(sessionId);
-        reject(new Error(`claude-code-channel: reply timeout for session ${sessionId}`));
-      }, this.timeoutMs);
+  protected parseInboundMessage(raw: string): InboundReplyMessage | null {
+    let msg: unknown;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (!msg || typeof msg !== 'object') return null;
+    const payload = msg as Record<string, unknown>;
+    const type = payload['type'];
+    const sessionId = payload['sessionId'];
+    if ((type !== 'reply' && type !== 'reply_update') || typeof sessionId !== 'string') return null;
+    return {
+      type,
+      sessionId,
+      content: {
+        type: 'text',
+        text: typeof payload['text'] === 'string' ? (payload['text'] as string) : '',
+      },
+    };
+  }
 
-      this.pending.set(sessionId, { resolve, reject, timer });
+  protected noConnectionErrorMessage(): string {
+    if (!this.isWsAttached()) {
+      return 'claude-code-channel: WS server not attached — call attach() before sending messages';
+    }
+    return 'claude-code-channel: no connected claude-code-channel CLI — is it running?';
+  }
 
-      (targetWs as WebSocket).send(payload, (err) => {
-        if (err) {
-          clearTimeout(timer);
-          this.pending.delete(sessionId);
-          reject(new Error(`claude-code-channel: failed to send message: ${err.message}`));
-        }
+  protected async onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void> {
+    const { sessionId, message, channelAdapter } = ctx;
+    logger.warn({ sessionId }, 'claude-code-channel: reply timeout');
+    try {
+      await channelAdapter.reply({
+        ...message,
+        timestamp: Date.now(),
+        content: { type: 'text', text: `claude-code-channel: reply timeout for session ${sessionId}` },
       });
-    });
-    return { type: 'text', text: replyText };
+    } catch (err) {
+      logger.warn({ err, sessionId }, 'failed to send timeout reply');
+    }
+  }
+
+  protected onUnknownReply(ctx: UnknownReplyContext): void {
+    logger.warn({ sessionId: ctx.sessionId }, 'received reply for unknown session');
+  }
+
+  protected onWsAttached(path: string): void {
+    logger.info({ path }, 'claude-code WS handler attached');
+  }
+
+  protected onWsConnected(_connection: WebSocket): void {
+    logger.info('claude-code-channel CLI connected');
+  }
+
+  protected onWsDisconnected(_connection: WebSocket): void {
+    logger.info('claude-code-channel CLI disconnected');
+  }
+
+  protected onWsError(_connection: WebSocket, err: unknown): void {
+    logger.warn({ err }, 'claude-code-channel WS error');
+  }
+
+  protected formatSendError(errorMessage: string): string {
+    return `claude-code-channel: failed to send message: ${errorMessage}`;
   }
 
   close(): void {
-    this.wss?.close();
+    this.closeWs();
   }
 }
