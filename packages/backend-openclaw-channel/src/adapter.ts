@@ -17,7 +17,7 @@ export interface OpenclawChannelConfig {
   /** How long to wait for a reply before timing out, in ms (default: 60000) */
   timeoutMs?: number;
   /** WS path to listen on (default: /ws/openclaw). Set explicitly when running multiple WS backends. */
-  path?: string;
+  wsPath?: string;
 }
 
 /**
@@ -35,15 +35,12 @@ export interface OpenclawChannelConfig {
 export class OpenclawChannelBackend extends WebSocketSessionBackend {
   private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
 
-  private readonly path: string;
-
   name = 'openclaw';
 
   constructor(private config: OpenclawChannelConfig) {
     const timeoutMs = config.timeoutMs ?? 60_000;
-    super(timeoutMs, OpenclawChannelBackend.SESSION_IDLE_TTL_MS);
+    super(timeoutMs, OpenclawChannelBackend.SESSION_IDLE_TTL_MS, config.wsPath ?? "'/ws/openclaw'");
     this.name = config.name ?? 'openclaw';
-    this.path = config.path ?? '/ws/openclaw';
   }
 
   /**
