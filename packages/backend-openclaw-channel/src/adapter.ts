@@ -1,4 +1,3 @@
-import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
@@ -111,26 +110,6 @@ export class OpenclawChannelBackend extends WebSocketSessionBackend {
 
   protected onUnknownReply(ctx: UnknownReplyContext): void {
     logger.warn({ sessionId: ctx.sessionId }, 'received reply for unknown session');
-  }
-
-  protected onWsAttached(path: string): void {
-    logger.info({ path }, 'openclaw WS handler attached');
-  }
-
-  protected onWsConnected(_connection: WebSocket): void {
-    logger.info('openclaw plugin connected');
-  }
-
-  protected onWsDisconnected(_connection: WebSocket): void {
-    logger.info('openclaw plugin disconnected');
-  }
-
-  protected onWsError(_connection: WebSocket, err: unknown): void {
-    logger.warn({ err }, 'openclaw plugin WS error');
-  }
-
-  protected formatSendError(errorMessage: string): string {
-    return `openclaw-channel: failed to send message: ${errorMessage}`;
   }
 
   close(): void {

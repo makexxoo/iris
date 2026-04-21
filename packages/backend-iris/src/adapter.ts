@@ -1,4 +1,3 @@
-import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
@@ -125,21 +124,21 @@ export class IrisBackend extends WebSocketSessionBackend {
 
   protected noConnectionErrorMessage(): string {
     if (!this.isWsAttached()) {
-      return 'hermes: WS server not attached — call attach() before sending messages';
+      return 'iris: WS server not attached — call attach() before sending messages';
     }
-    return 'hermes: no connected plugin-hermes instance — is it running?';
+    return 'iris: no connected plugin-hermes instance — is it running?';
   }
 
   protected async onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void> {
     const { sessionId, requestId, message, channelAdapter } = ctx;
-    logger.warn({ sessionId, requestId }, 'hermes: reply timeout');
+    logger.warn({ sessionId, requestId }, 'iris: reply timeout');
     try {
       await channelAdapter.reply({
         ...message,
         timestamp: Date.now(),
         content: {
           type: 'text',
-          text: `hermes: reply timeout for session ${sessionId}`,
+          text: `iris: reply timeout for session ${sessionId}`,
         },
       });
     } catch (err) {
@@ -152,26 +151,6 @@ export class IrisBackend extends WebSocketSessionBackend {
       { sessionId: ctx.sessionId, requestId: ctx.requestId },
       'received reply for unknown request',
     );
-  }
-
-  protected onWsAttached(path: string): void {
-    logger.info({ path }, 'hermes WS handler attached');
-  }
-
-  protected onWsConnected(_connection: WebSocket): void {
-    logger.info('plugin-hermes connected');
-  }
-
-  protected onWsDisconnected(_connection: WebSocket): void {
-    logger.info('plugin-hermes disconnected');
-  }
-
-  protected onWsError(_connection: WebSocket, err: unknown): void {
-    logger.warn({ err }, 'plugin-hermes WS error');
-  }
-
-  protected formatSendError(errorMessage: string): string {
-    return `hermes: failed to send message: ${errorMessage}`;
   }
 
   close(): void {

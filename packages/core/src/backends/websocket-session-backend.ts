@@ -2,6 +2,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import { SessionRoutedWsBackend } from './session-routed-ws-backend';
 import { SessionStateManager } from './session-state-manager';
+import pino from 'pino';
+
+const logger = pino({ name: 'backend-ws' });
 
 export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<WebSocket> {
   private wss: WebSocketServer | null = null;
@@ -68,9 +71,19 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
     });
   }
 
-  protected abstract onWsAttached(path: string): void;
-  protected abstract onWsConnected(connection: WebSocket): void;
-  protected abstract onWsDisconnected(connection: WebSocket): void;
-  protected abstract onWsError(connection: WebSocket, err: unknown): void;
-  protected abstract formatSendError(errorMessage: string): string;
+  protected onWsAttached(path: string): void {
+    logger.info({ path, name: this.name }, `WS handler attached`);
+  }
+  protected onWsConnected(_connection: WebSocket): void {
+    logger.info({ name: this.name }, 'plugin connected');
+  }
+  protected onWsDisconnected(_connection: WebSocket): void {
+    logger.info({ name: this.name }, 'plugin disconnected');
+  }
+  protected onWsError(_connection: WebSocket, err: unknown): void {
+    logger.warn({ name: this.name, err }, 'plugin WS error');
+  }
+  protected formatSendError(errorMessage: string): string {
+    return `[${this.name}]: failed to send message: ${errorMessage}`;
+  }
 }

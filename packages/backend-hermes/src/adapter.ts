@@ -1,4 +1,3 @@
-import { WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
@@ -152,26 +151,6 @@ export class HermesBackend extends WebSocketSessionBackend {
       { sessionId: ctx.sessionId, requestId: ctx.requestId },
       'received reply for unknown request',
     );
-  }
-
-  protected onWsAttached(path: string): void {
-    logger.info({ path }, 'hermes WS handler attached');
-  }
-
-  protected onWsConnected(_connection: WebSocket): void {
-    logger.info('plugin-hermes connected');
-  }
-
-  protected onWsDisconnected(_connection: WebSocket): void {
-    logger.info('plugin-hermes disconnected');
-  }
-
-  protected onWsError(_connection: WebSocket, err: unknown): void {
-    logger.warn({ err }, 'plugin-hermes WS error');
-  }
-
-  protected formatSendError(errorMessage: string): string {
-    return `hermes: failed to send message: ${errorMessage}`;
   }
 
   close(): void {
