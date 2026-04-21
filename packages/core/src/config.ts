@@ -55,6 +55,19 @@ export interface WechatGlobalConfig {
 
 export type ChannelConfig = FeishuChannelConfig | TelegramChannelConfig | WechatChannelConfig;
 
+export interface BackendInstanceConfig {
+  name: string;
+  enabled?: boolean;
+  wsPath?: string;
+  timeoutMs?: number;
+  /** Reserved for backend-specific extensions */
+  options?: Record<string, unknown>;
+}
+
+export interface BackendGroupConfig {
+  instances: BackendInstanceConfig[];
+}
+
 // ---------------------------------------------------------------------------
 // Root config
 // ---------------------------------------------------------------------------
@@ -76,22 +89,18 @@ export interface IrisConfig {
      * e.g. { "feishu-main": "claude-code", "feishu-support": "openclaw" }
      */
     routes: Record<string, string>;
+
+    /** WS-based openclaw-channel backend group */
+    openclaw?: BackendGroupConfig;
+    /** WS-based claude-code-channel backend group */
+    'claude-code'?: BackendGroupConfig;
+    /** WS-based hermes backend group */
+    hermes?: BackendGroupConfig;
+
     /**
-     * hermes-agent backend — plugin-hermes CLI connects here as WS client.
-     * Mirrors the openclaw-channel / claude-code-channel pattern.
-     * Run: hermes-plugin --iris-ws ws://<iris-host>:9527/ws/hermes
+     * 自定义协议组
      */
-    hermes?: {
-      enabled?: boolean;
-      /** WS path to listen on (default: /ws/hermes) */
-      path?: string;
-      /** How long to wait for a reply before timing out, in ms (default: 300000 = 5 min) */
-      timeoutMs?: number;
-    };
-    /** WS-based openclaw-channel backend */
-    openclaw?: { timeoutMs?: number; path?: string; enabled?: boolean };
-    /** WS-based claude-code-channel backend */
-    'claude-code'?: { timeoutMs?: number; path?: string; enabled?: boolean };
+    iris?: BackendGroupConfig;
   };
 
   plugins: Array<{ name: string; enabled?: boolean; options?: Record<string, unknown> }>;
