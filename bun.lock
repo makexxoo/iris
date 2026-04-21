@@ -26,6 +26,7 @@
       "devDependencies": {
         "@agent-iris/backend-claude-code-channel": "workspace:*",
         "@agent-iris/backend-hermes": "workspace:*",
+        "@agent-iris/backend-iris": "workspace:*",
         "@agent-iris/backend-openclaw-channel": "workspace:*",
         "@agent-iris/channel-feishu": "workspace:*",
         "@agent-iris/channel-telegram": "workspace:*",
@@ -48,6 +49,18 @@
     },
     "packages/backend-hermes": {
       "name": "@agent-iris/backend-hermes",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agent-iris/core": "workspace:*",
+        "pino": "^9.3.2",
+        "ws": "^8.18.0",
+      },
+      "devDependencies": {
+        "@types/ws": "^8.5.13",
+      },
+    },
+    "packages/backend-iris": {
+      "name": "@agent-iris/backend-iris",
       "version": "0.1.0",
       "dependencies": {
         "@agent-iris/core": "workspace:*",
@@ -174,6 +187,8 @@
     "@agent-iris/backend-claude-code-channel": ["@agent-iris/backend-claude-code-channel@workspace:packages/backend-claude-code-channel"],
 
     "@agent-iris/backend-hermes": ["@agent-iris/backend-hermes@workspace:packages/backend-hermes"],
+
+    "@agent-iris/backend-iris": ["@agent-iris/backend-iris@workspace:packages/backend-iris"],
 
     "@agent-iris/backend-openclaw-channel": ["@agent-iris/backend-openclaw-channel@workspace:packages/backend-openclaw-channel"],
 

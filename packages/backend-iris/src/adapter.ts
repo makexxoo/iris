@@ -54,7 +54,7 @@ function parseReplyContent(msg: Record<string, unknown>): MessageContent {
   return { type: 'text', text: String(msg['text'] ?? '') };
 }
 
-export interface HermesBackendConfig {
+export interface IrisBackendConfig {
   name?: string;
   /** How long to wait for a reply before timing out, in ms (default: 300000 = 5 min) */
   timeoutMs?: number;
@@ -73,15 +73,15 @@ export interface HermesBackendConfig {
  *   plugin → iris (WS): { type: 'reply', sessionId, content: ContentPart[] }
  *                    or (legacy): { type: 'reply', sessionId, text: string }
  */
-export class HermesBackend extends WebSocketSessionBackend {
+export class IrisBackend extends WebSocketSessionBackend {
   private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
 
-  name = 'hermes';
+  name = 'iris';
 
-  constructor(config: HermesBackendConfig) {
+  constructor(config: IrisBackendConfig) {
     const timeoutMs = config.timeoutMs ?? 300_000;
-    super(timeoutMs, HermesBackend.SESSION_IDLE_TTL_MS, config.wsPath ?? '/ws/hermes');
-    this.name = config.name ?? 'hermes';
+    super(timeoutMs, IrisBackend.SESSION_IDLE_TTL_MS, config.wsPath ?? '/ws/iris');
+    this.name = config.name ?? 'iris';
   }
 
   /** Attach the WS handler to an existing HTTP server. Call before listen(). */

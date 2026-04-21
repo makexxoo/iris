@@ -17,7 +17,7 @@ export interface ClaudeCodeChannelConfig {
   /** How long to wait for a reply before timing out, in ms (default: 900000 = 15 min) */
   timeoutMs?: number;
   /** WS path to listen on (default: /ws/claude-code) */
-  path?: string;
+  wsPath?: string;
 }
 
 /**
@@ -32,15 +32,16 @@ export interface ClaudeCodeChannelConfig {
 export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
   private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
 
-  private readonly path: string;
-
   name = 'claude-code';
 
   constructor(private config: ClaudeCodeChannelConfig) {
     const timeoutMs = config.timeoutMs ?? 900_000;
-    super(timeoutMs, ClaudeCodeChannelBackend.SESSION_IDLE_TTL_MS);
+    super(
+      timeoutMs,
+      ClaudeCodeChannelBackend.SESSION_IDLE_TTL_MS,
+      config.wsPath ?? '/ws/claude-code',
+    );
     this.name = config.name ?? 'claude-code';
-    this.path = config.path ?? '/ws/claude-code';
   }
 
   /** Attach the WS handler to an existing HTTP server. Call before listen(). */
@@ -98,7 +99,10 @@ export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
       await channelAdapter.reply({
         ...message,
         timestamp: Date.now(),
-        content: { type: 'text', text: `claude-code-channel: reply timeout for session ${sessionId}` },
+        content: {
+          type: 'text',
+          text: `claude-code-channel: reply timeout for session ${sessionId}`,
+        },
       });
     } catch (err) {
       logger.warn({ err, sessionId }, 'failed to send timeout reply');

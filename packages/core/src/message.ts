@@ -15,6 +15,8 @@ export interface MessageAttachment {
   fileKey?: string;
   fileName?: string;
   mimeType?: string;
+  /** Publicly reachable URL when available */
+  url?: string;
   /** Base64-encoded raw bytes, if downloaded */
   base64?: string;
 }

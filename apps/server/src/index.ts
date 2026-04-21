@@ -2,6 +2,7 @@
 import pino from 'pino';
 import { parseArgs } from 'node:util';
 import {
+  BackendAdapter,
   ChannelAdapter,
   createServer,
   loadConfig,
@@ -14,6 +15,7 @@ import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wech
 import { OpenclawChannelBackend } from '@agent-iris/backend-openclaw-channel';
 import { ClaudeCodeChannelBackend } from '@agent-iris/backend-claude-code-channel';
 import { HermesBackend } from '@agent-iris/backend-hermes';
+import { IrisBackend } from '@agent-iris/backend-iris';
 import { MemberInfoPlugin } from '@agent-iris/plugin-member-info';
 
 const { values: argv } = parseArgs({
@@ -58,22 +60,66 @@ async function main() {
   const router = new MessageEngine(pipeline, config);
 
   // --- Backend adapters ---
-  let openclawChannelBackend: OpenclawChannelBackend | undefined;
-  if (config.backends.openclaw?.enabled) {
-    openclawChannelBackend = new OpenclawChannelBackend(config.backends.openclaw);
-    router.registerBackend(openclawChannelBackend);
+  const attachableBackends: BackendAdapter[] = [];
+
+  for (const instance of config.backends.openclaw?.instances ?? []) {
+    if (instance.enabled === false) continue;
+    const backend = new OpenclawChannelBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
+    router.registerBackend(backend);
+    attachableBackends.push(backend);
+    logger.info(
+      { backendType: 'openclaw', name: backend.name, wsPath: instance.wsPath },
+      'backend registered',
+    );
   }
 
-  let claudeCodeChannelBackend: ClaudeCodeChannelBackend | undefined;
-  if (config.backends['claude-code']?.enabled) {
-    claudeCodeChannelBackend = new ClaudeCodeChannelBackend(config.backends['claude-code']);
-    router.registerBackend(claudeCodeChannelBackend);
+  for (const instance of config.backends['claude-code']?.instances ?? []) {
+    if (instance.enabled === false) continue;
+    const backend = new ClaudeCodeChannelBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
+    router.registerBackend(backend);
+    attachableBackends.push(backend);
+    logger.info(
+      { backendType: 'claude-code', name: backend.name, wsPath: instance.wsPath },
+      'backend registered',
+    );
   }
 
-  let hermesBackend: HermesBackend | undefined;
-  if (config.backends.hermes?.enabled !== false) {
-    hermesBackend = new HermesBackend(config.backends.hermes ?? {});
-    router.registerBackend(hermesBackend);
+  for (const instance of config.backends.hermes?.instances ?? []) {
+    if (instance.enabled === false) continue;
+    const backend = new HermesBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
+    router.registerBackend(backend);
+    attachableBackends.push(backend);
+    logger.info(
+      { backendType: 'hermes', name: backend.name, wsPath: instance.wsPath },
+      'backend registered',
+    );
+  }
+
+  for (const instance of config.backends.iris?.instances ?? []) {
+    if (instance.enabled === false) continue;
+    const backend = new IrisBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
+    router.registerBackend(backend);
+    attachableBackends.push(backend);
+    logger.info(
+      { backendType: 'iris', name: backend.name, wsPath: instance.wsPath },
+      'backend registered',
+    );
   }
 
   // --- Channel adapters (array form) ---
@@ -146,9 +192,9 @@ async function main() {
   }
 
   // Attach WS backends to the shared HTTP server (no separate port needed)
-  openclawChannelBackend?.attach(server.server);
-  claudeCodeChannelBackend?.attach(server.server);
-  hermesBackend?.attach(server.server);
+  for (const backend of attachableBackends) {
+    backend.attach(server.server);
+  }
 
   const port = config.server.port;
   await server.listen({ port, host: '0.0.0.0' });

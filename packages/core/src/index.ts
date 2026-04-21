@@ -7,6 +7,7 @@ export * from './backends/types';
 export * from './backends/session-state-manager';
 export * from './backends/session-routed-ws-backend';
 export * from './backends/websocket-session-backend';
+export * from './backends/protocol';
 export * from './plugins/types';
 
 // Implementations
