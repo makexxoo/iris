@@ -1,5 +1,5 @@
 {
-  "name": "@agent-iris",
+  "name": "@agent-iris/root",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "bun run --cwd apps/server dev",
     "start": "bun run --cwd apps/server start",
+    "clean": "find . -type f \\( -name \"*.d.ts\" -o -name \"*.d.ts.map\" -o -name \"*.js\" -o -name \"*.js.map\" \\) -delete",
     "build": "tsc -b",
     "test": "bun test",
     "test:watch": "bun test --watch",

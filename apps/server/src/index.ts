@@ -9,6 +9,7 @@ import {
   LoggerPlugin,
   MessageEngine,
   PluginPipeline,
+  SessionStateManager,
 } from '@agent-iris/core';
 import { FeishuAdapter } from '@agent-iris/channel-feishu';
 import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wechat';
@@ -62,13 +63,18 @@ async function main() {
   // --- Backend adapters ---
   const attachableBackends: BackendAdapter[] = [];
 
+  const sessionStates = new SessionStateManager(10 * 60 * 1000);
+
   for (const instance of config.backends.openclaw?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new OpenclawChannelBackend({
-      name: instance.name,
-      timeoutMs: instance.timeoutMs,
-      wsPath: instance.wsPath,
-    });
+    const backend = new OpenclawChannelBackend(
+      {
+        name: instance.name,
+        timeoutMs: instance.timeoutMs,
+        wsPath: instance.wsPath,
+      },
+      sessionStates,
+    );
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -79,11 +85,14 @@ async function main() {
 
   for (const instance of config.backends['claude-code']?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new ClaudeCodeChannelBackend({
-      name: instance.name,
-      timeoutMs: instance.timeoutMs,
-      wsPath: instance.wsPath,
-    });
+    const backend = new ClaudeCodeChannelBackend(
+      {
+        name: instance.name,
+        timeoutMs: instance.timeoutMs,
+        wsPath: instance.wsPath,
+      },
+      sessionStates,
+    );
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -94,11 +103,14 @@ async function main() {
 
   for (const instance of config.backends.hermes?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new HermesBackend({
-      name: instance.name,
-      timeoutMs: instance.timeoutMs,
-      wsPath: instance.wsPath,
-    });
+    const backend = new HermesBackend(
+      {
+        name: instance.name,
+        timeoutMs: instance.timeoutMs,
+        wsPath: instance.wsPath,
+      },
+      sessionStates,
+    );
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -109,11 +121,14 @@ async function main() {
 
   for (const instance of config.backends.iris?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new IrisBackend({
-      name: instance.name,
-      timeoutMs: instance.timeoutMs,
-      wsPath: instance.wsPath,
-    });
+    const backend = new IrisBackend(
+      {
+        name: instance.name,
+        timeoutMs: instance.timeoutMs,
+        wsPath: instance.wsPath,
+      },
+      sessionStates,
+    );
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(

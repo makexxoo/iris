@@ -9,7 +9,7 @@ import type {
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { WebSocketSessionBackend } from '@agent-iris/core';
+import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-hermes' });
 
@@ -74,13 +74,11 @@ export interface IrisBackendConfig {
  *                    or (legacy): { type: 'reply', sessionId, text: string }
  */
 export class IrisBackend extends WebSocketSessionBackend {
-  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
-
   name = 'iris';
 
-  constructor(config: IrisBackendConfig) {
+  constructor(config: IrisBackendConfig, sessionStates: SessionStateManager) {
     const timeoutMs = config.timeoutMs ?? 300_000;
-    super(timeoutMs, IrisBackend.SESSION_IDLE_TTL_MS, config.wsPath ?? '/ws/iris');
+    super(timeoutMs, sessionStates, config.wsPath ?? '/ws/iris');
     this.name = config.name ?? 'iris';
   }
 

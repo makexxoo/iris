@@ -7,7 +7,7 @@ import type {
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { WebSocketSessionBackend } from '@agent-iris/core';
+import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-openclaw' });
 
@@ -33,13 +33,14 @@ export interface OpenclawChannelConfig {
  * chat() blocks until the reply arrives or the timeout fires.
  */
 export class OpenclawChannelBackend extends WebSocketSessionBackend {
-  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
-
   name = 'openclaw';
 
-  constructor(private config: OpenclawChannelConfig) {
+  constructor(
+    private config: OpenclawChannelConfig,
+    sessionStates: SessionStateManager,
+  ) {
     const timeoutMs = config.timeoutMs ?? 60_000;
-    super(timeoutMs, OpenclawChannelBackend.SESSION_IDLE_TTL_MS, config.wsPath ?? "'/ws/openclaw'");
+    super(timeoutMs, sessionStates, config.wsPath ?? "'/ws/openclaw'");
     this.name = config.name ?? 'openclaw';
   }
 

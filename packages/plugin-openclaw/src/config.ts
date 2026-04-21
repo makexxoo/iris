@@ -1,14 +1,14 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/core";
-import type { IrisChannelConfig, ResolvedIrisAccount } from "./types.js";
+import type { OpenClawConfig } from 'openclaw/plugin-sdk/config-runtime';
+import { DEFAULT_ACCOUNT_ID } from 'openclaw/plugin-sdk/core';
+import type { IrisChannelConfig, ResolvedIrisAccount } from './types.js';
 
 function getChannelSection(cfg: OpenClawConfig): Record<string, unknown> {
-  return (cfg as unknown as Record<string, unknown>)["channels"] as Record<string, unknown> ?? {};
+  return ((cfg as unknown as Record<string, unknown>)['channels'] as Record<string, unknown>) ?? {};
 }
 
 function getIrisSection(cfg: OpenClawConfig): Record<string, unknown> {
   const channels = getChannelSection(cfg);
-  return (channels["iris"] as Record<string, unknown>) ?? {};
+  return (channels['iris'] as Record<string, unknown>) ?? {};
 }
 
 /**
@@ -18,11 +18,11 @@ function getIrisSection(cfg: OpenClawConfig): Record<string, unknown> {
  */
 export function listIrisAccountIds(cfg: OpenClawConfig): string[] {
   const section = getIrisSection(cfg);
-  const accounts = section["accounts"] as Record<string, unknown> | undefined;
-  if (accounts && typeof accounts === "object") {
+  const accounts = section['accounts'] as Record<string, unknown> | undefined;
+  if (accounts && typeof accounts === 'object') {
     return Object.keys(accounts);
   }
-  if (section["irisWsUrl"]) {
+  if (section['irisWsUrl']) {
     return [DEFAULT_ACCOUNT_ID];
   }
   return [];
@@ -37,7 +37,7 @@ export function resolveIrisAccount(
 ): ResolvedIrisAccount {
   const id = accountId ?? DEFAULT_ACCOUNT_ID;
   const section = getIrisSection(cfg);
-  const accounts = section["accounts"] as Record<string, unknown> | undefined;
+  const accounts = section['accounts'] as Record<string, unknown> | undefined;
 
   let raw: Record<string, unknown>;
   if (accounts && id !== DEFAULT_ACCOUNT_ID && accounts[id]) {
@@ -50,8 +50,8 @@ export function resolveIrisAccount(
 
   return {
     accountId: id,
-    irisWsUrl: (irisConfig.irisWsUrl ?? "").replace(/\/$/, ""),
-    irisUrl: irisConfig.irisUrl ? irisConfig.irisUrl.replace(/\/$/, "") : undefined,
+    irisWsUrl: (irisConfig.irisWsUrl ?? '').replace(/\/$/, ''),
+    irisUrl: irisConfig.irisUrl ? irisConfig.irisUrl.replace(/\/$/, '') : undefined,
     webhookSecret: irisConfig.webhookSecret,
     enabled: irisConfig.enabled !== false,
     config: {

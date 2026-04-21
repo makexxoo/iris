@@ -1,12 +1,12 @@
-import WebSocket from "ws";
-import type { ChannelGatewayContext } from "openclaw/plugin-sdk/channel-contract";
-import { createChannelReplyPipeline } from "openclaw/plugin-sdk/channel-reply-pipeline";
-import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk/inbound-envelope";
-import type { ResolvedIrisAccount, IrisInboundPayload } from "./types.js";
+import WebSocket from 'ws';
+import type { ChannelGatewayContext } from 'openclaw/plugin-sdk/channel-contract';
+import { createChannelReplyPipeline } from 'openclaw/plugin-sdk/channel-reply-pipeline';
+import { resolveInboundRouteEnvelopeBuilderWithRuntime } from 'openclaw/plugin-sdk/inbound-envelope';
+import type { ResolvedIrisAccount, IrisInboundPayload } from './types.js';
 
 /** WS message sent from iris to openclaw */
 interface IrisWsInbound {
-  type: "message";
+  type: 'message';
   id: string;
   channel: string;
   channelUserId: string;
@@ -22,19 +22,19 @@ interface IrisWsInbound {
  * openclaw's ReplyPayload may contain blocks; we join all text blocks.
  */
 function extractTextFromPayload(payload: unknown): string {
-  if (!payload || typeof payload !== "object") return "";
+  if (!payload || typeof payload !== 'object') return '';
   const p = payload as Record<string, unknown>;
 
-  if (Array.isArray(p["blocks"])) {
-    return (p["blocks"] as Array<Record<string, unknown>>)
-      .filter((b) => b["type"] === "text" || b["kind"] === "text")
-      .map((b) => String(b["text"] ?? b["content"] ?? ""))
-      .join("\n")
+  if (Array.isArray(p['blocks'])) {
+    return (p['blocks'] as Array<Record<string, unknown>>)
+      .filter((b) => b['type'] === 'text' || b['kind'] === 'text')
+      .map((b) => String(b['text'] ?? b['content'] ?? ''))
+      .join('\n')
       .trim();
   }
 
-  if (typeof p["text"] === "string") return p["text"];
-  return "";
+  if (typeof p['text'] === 'string') return p['text'];
+  return '';
 }
 
 /**
@@ -54,11 +54,11 @@ async function dispatchIrisMessage(params: {
   const core = ctx.channelRuntime as any;
 
   if (!core) {
-    log?.warn?.("iris: channelRuntime not available — skipping AI dispatch");
+    log?.warn?.('iris: channelRuntime not available — skipping AI dispatch');
     return;
   }
 
-  const rawBody = payload.content.text ?? "";
+  const rawBody = payload.content.text ?? '';
   const sessionId = payload.sessionId;
   const channelUserId = payload.channelUserId;
 
@@ -68,7 +68,7 @@ async function dispatchIrisMessage(params: {
     cfg,
     channel,
     accountId: account.accountId,
-    peer: { kind: "direct", id: channelUserId },
+    peer: { kind: 'direct', id: channelUserId },
     runtime: core,
   });
 
@@ -89,7 +89,7 @@ async function dispatchIrisMessage(params: {
     To: `${channel}:${sessionId}`,
     SessionKey: route.sessionKey,
     AccountId: account.accountId,
-    ChatType: "direct",
+    ChatType: 'direct',
     ConversationLabel: fromLabel,
     SenderId: channelUserId,
     Provider: channel,
@@ -149,11 +149,11 @@ function connectWithReconnect(params: {
 
   const ws = new WebSocket(account.irisWsUrl);
 
-  ws.on("open", () => {
+  ws.on('open', () => {
     log?.info?.(`[${account.accountId}] iris WS connected to ${account.irisWsUrl}`);
   });
 
-  ws.on("message", (raw) => {
+  ws.on('message', (raw) => {
     if (abortSignal.aborted) return;
 
     let msg: unknown;
@@ -163,9 +163,9 @@ function connectWithReconnect(params: {
       return;
     }
 
-    if (!msg || typeof msg !== "object") return;
+    if (!msg || typeof msg !== 'object') return;
     const m = msg as Record<string, unknown>;
-    if (m["type"] !== "message") return;
+    if (m['type'] !== 'message') return;
 
     const inbound = m as unknown as IrisWsInbound;
     if (!inbound.content?.text) return; // skip non-text for now
@@ -175,7 +175,7 @@ function connectWithReconnect(params: {
       channel: inbound.channel,
       channelUserId: inbound.channelUserId,
       sessionId: inbound.sessionId,
-      content: inbound.content as IrisInboundPayload["content"],
+      content: inbound.content as IrisInboundPayload['content'],
       timestamp: inbound.timestamp,
     };
 
@@ -184,7 +184,7 @@ function connectWithReconnect(params: {
       payload,
       sendReply: (sessionId, text) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "reply", sessionId, text }));
+          ws.send(JSON.stringify({ type: 'reply', sessionId, text }));
         }
       },
     }).catch((err) => {
@@ -192,19 +192,19 @@ function connectWithReconnect(params: {
     });
   });
 
-  ws.on("close", () => {
+  ws.on('close', () => {
     log?.info?.(`[${account.accountId}] iris WS disconnected`);
     if (!abortSignal.aborted) {
       setTimeout(() => connectWithReconnect({ ctx, abortSignal }), 5_000);
     }
   });
 
-  ws.on("error", (err) => {
+  ws.on('error', (err) => {
     // 'close' will fire after this — reconnect is handled there
     log?.warn?.(`[${account.accountId}] iris WS error: ${String(err)}`);
   });
 
-  abortSignal.addEventListener("abort", () => ws.close(), { once: true });
+  abortSignal.addEventListener('abort', () => ws.close(), { once: true });
 }
 
 /**
@@ -228,7 +228,7 @@ export async function startIrisGatewayAccount(
 
   // Hold until openclaw signals the account should stop
   await new Promise<void>((resolve) => {
-    abortSignal.addEventListener("abort", () => resolve(), { once: true });
+    abortSignal.addEventListener('abort', () => resolve(), { once: true });
   });
 
   log?.info?.(`[${account.accountId}] iris channel stopped`);

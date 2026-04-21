@@ -1,14 +1,15 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import { SessionRoutedWsBackend } from './session-routed-ws-backend';
+import { SessionStateManager } from './session-state-manager';
 
 export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<WebSocket> {
   private wss: WebSocketServer | null = null;
 
   protected path: string;
 
-  protected constructor(timeoutMs: number, idleTtlMs: number, path: string) {
-    super(timeoutMs, idleTtlMs);
+  protected constructor(timeoutMs: number, sessionStates: SessionStateManager, path: string) {
+    super(timeoutMs, sessionStates);
     this.path = path;
   }
 

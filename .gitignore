@@ -10,6 +10,7 @@ node_modules
 .pnpm-store
 dist
 .env
+tsconfig.tsbuildinfo
 
 *.d.ts
 *.d.ts.map

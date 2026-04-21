@@ -7,7 +7,7 @@ import type {
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { WebSocketSessionBackend } from '@agent-iris/core';
+import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-claude-code' });
 
@@ -30,17 +30,14 @@ export interface ClaudeCodeChannelConfig {
  *   CLI → iris: { type: 'reply', sessionId, text }
  */
 export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
-  private static readonly SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
-
   name = 'claude-code';
 
-  constructor(private config: ClaudeCodeChannelConfig) {
+  constructor(
+    private config: ClaudeCodeChannelConfig,
+    sessionStates: SessionStateManager,
+  ) {
     const timeoutMs = config.timeoutMs ?? 900_000;
-    super(
-      timeoutMs,
-      ClaudeCodeChannelBackend.SESSION_IDLE_TTL_MS,
-      config.wsPath ?? '/ws/claude-code',
-    );
+    super(timeoutMs, sessionStates, config.wsPath ?? '/ws/claude-code');
     this.name = config.name ?? 'claude-code';
   }
 

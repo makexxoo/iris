@@ -118,7 +118,11 @@ function buildMediaItem(
   plaintextSize: number,
   rawfilemd5: string,
 ): { mediaType: number; item: Record<string, unknown> } {
-  const media = { encrypt_query_param: encryptedQueryParam, aes_key: aesKeyForApi, encrypt_type: 1 };
+  const media = {
+    encrypt_query_param: encryptedQueryParam,
+    aes_key: aesKeyForApi,
+    encrypt_type: 1,
+  };
 
   if (mimeType.startsWith('image/')) {
     return {

@@ -72,7 +72,9 @@ describe('handleIrisMessage', () => {
       msg: makeMsg({ content: { type: 'text', text: '' } }),
       sessionManager: mgr,
       cwd: '/tmp',
-      sendReply: (_, text) => { replies.push(text); },
+      sendReply: (_, text) => {
+        replies.push(text);
+      },
     });
 
     await new Promise((r) => setTimeout(r, 50));

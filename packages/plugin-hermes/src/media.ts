@@ -120,7 +120,10 @@ export function extractMedia(text: string, log?: (msg: string) => void): Extract
 
   // Remove all MEDIA: tags from text in one pass (mirrors hermes-agent's media_pattern.sub('', cleaned))
   let cleaned = MEDIA_PATTERN.source
-    ? text.replace(new RegExp(MEDIA_PATTERN.source, MEDIA_PATTERN.flags), '').replace(/\n{3,}/g, '\n\n').trim()
+    ? text
+        .replace(new RegExp(MEDIA_PATTERN.source, MEDIA_PATTERN.flags), '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
     : text;
 
   // Fallback 1: markdown links to local paths (both image and regular links).
@@ -130,15 +133,22 @@ export function extractMedia(text: string, log?: (msg: string) => void): Extract
     const candidate = normalizeCandidatePath(match.groups?.path ?? '');
     maybeAddFile(candidate, files, seenPaths, log);
   }
-  cleaned = cleaned.replace(mdLocalLinkPattern, '').replace(/\n{3,}/g, '\n\n').trim();
+  cleaned = cleaned
+    .replace(mdLocalLinkPattern, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
   // Fallback 2: bare local paths in plain text.
-  const localPathPattern = /(?<![:/\w.])(?<path>(?:~\/|\/)(?:[\w.\-]+\/)*[\w.\-]+\.(?:png|jpe?g|gif|webp|mp4|mov|avi|mkv|webm|ogg|opus|mp3|wav|m4a|pdf|docx?|xlsx?|pptx?|zip|tar|gz|bin))\b/gi;
+  const localPathPattern =
+    /(?<![:/\w.])(?<path>(?:~\/|\/)(?:[\w.\-]+\/)*[\w.\-]+\.(?:png|jpe?g|gif|webp|mp4|mov|avi|mkv|webm|ogg|opus|mp3|wav|m4a|pdf|docx?|xlsx?|pptx?|zip|tar|gz|bin))\b/gi;
   for (const match of cleaned.matchAll(localPathPattern)) {
     const candidate = normalizeCandidatePath(match.groups?.path ?? '');
     maybeAddFile(candidate, files, seenPaths, log);
   }
-  cleaned = cleaned.replace(localPathPattern, '').replace(/\n{3,}/g, '\n\n').trim();
+  cleaned = cleaned
+    .replace(localPathPattern, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
   return { text: cleaned, files };
 }

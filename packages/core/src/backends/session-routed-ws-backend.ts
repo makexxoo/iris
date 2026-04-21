@@ -1,7 +1,7 @@
-import { BackendAdapter } from './types';
-import { SessionStateManager } from './session-state-manager';
-import { BackendRequest, MessageContent } from '../message';
-import { ChannelAdapter } from '../channels/types';
+import { BackendAdapter } from './types.js';
+import { SessionStateManager } from './session-state-manager.js';
+import { BackendRequest, MessageContent } from '../message.js';
+import { ChannelAdapter } from '../channels/types.js';
 import type { IncomingMessage, Server } from 'http';
 
 export interface BackendChatRequest extends BackendRequest {
@@ -30,16 +30,13 @@ export interface UnknownReplyContext {
 export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdapter {
   private readonly connections = new Set<TConnection>();
   private readonly sessionToConnection = new Map<string, TConnection>();
-  private readonly sessionStates: SessionStateManager;
 
   abstract name: string;
 
   protected constructor(
     private readonly timeoutMs: number,
-    idleTtlMs: number = 10 * 60 * 1000,
-  ) {
-    this.sessionStates = new SessionStateManager(idleTtlMs);
-  }
+    private readonly sessionStates: SessionStateManager,
+  ) {}
 
   abstract attach(httpServer: Server<typeof IncomingMessage>): void;
 
