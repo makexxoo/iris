@@ -5,8 +5,15 @@ import { SessionRoutedWsBackend } from './session-routed-ws-backend';
 export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<WebSocket> {
   private wss: WebSocketServer | null = null;
 
-  protected constructor(timeoutMs: number, idleTtlMs: number) {
+  protected path: string;
+
+  protected constructor(timeoutMs: number, idleTtlMs: number, path: string) {
     super(timeoutMs, idleTtlMs);
+    this.path = path;
+  }
+
+  attach(httpServer: Server<typeof IncomingMessage>) {
+    this.attachWs(httpServer, this.path);
   }
 
   protected attachWs(httpServer: Server<typeof IncomingMessage>, path: string): void {

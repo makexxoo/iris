@@ -2,6 +2,7 @@ import { BackendAdapter } from './types';
 import { SessionStateManager } from './session-state-manager';
 import { BackendRequest, MessageContent } from '../message';
 import { ChannelAdapter } from '../channels/types';
+import type { IncomingMessage, Server } from 'http';
 
 export interface BackendChatRequest extends BackendRequest {
   channelAdapter: ChannelAdapter;
@@ -39,6 +40,8 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
   ) {
     this.sessionStates = new SessionStateManager(idleTtlMs);
   }
+
+  abstract attach(httpServer: Server<typeof IncomingMessage>): void;
 
   async chat(req: BackendChatRequest): Promise<void> {
     const { message, channelAdapter } = req;
