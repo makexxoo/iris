@@ -81,11 +81,6 @@ export class IrisBackend extends WebSocketSessionBackend {
     this.name = config.name ?? 'iris';
   }
 
-  /** Attach the WS handler to an existing HTTP server. Call before listen(). */
-  attach(httpServer: Server<typeof IncomingMessage>): void {
-    this.attachWs(httpServer, this.path);
-  }
-
   protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
     return JSON.stringify({

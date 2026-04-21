@@ -43,14 +43,6 @@ export class OpenclawChannelBackend extends WebSocketSessionBackend {
     this.name = config.name ?? 'openclaw';
   }
 
-  /**
-   * Attach this backend's WS handler to an existing HTTP server.
-   * Call this after the Fastify server is created, before listen().
-   */
-  attach(httpServer: Server<typeof IncomingMessage>): void {
-    this.attachWs(httpServer, this.path);
-  }
-
   protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
     return JSON.stringify({
