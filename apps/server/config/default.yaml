@@ -78,18 +78,24 @@ backends:
   #       port: 8642
   # ---------------------------------------------------------------------------
   hermes:
-    enabled: true
-    # path: /ws/hermes       # WS endpoint plugin-hermes connects to
-    # timeoutMs: 300000      # 5 min reply timeout
+    instances:
+      - name: default
+        enabled: true
+      # path: /ws/hermes       # WS endpoint plugin-hermes connects to
+      # timeoutMs: 300000      # 5 min reply timeout
 
   openclaw:
-    enabled: false
-    # WS path: /ws/openclaw (default). Configure irisWsUrl in openclaw as:
-    #   ws://<iris-host>:9527/ws/openclaw
-    # path: /ws/openclaw           # override if needed
+    instances:
+      - name: default
+        enabled: false
+      # WS path: /ws/openclaw (default). Configure irisWsUrl in openclaw as:
+      #   ws://<iris-host>:9527/ws/openclaw
+      # path: /ws/openclaw           # override if needed
 
   claude-code:
-    enabled: false
-    # WS path: /ws/claude-code (default), timeout: 900000ms (15 min)
-    # Run the CLI: claude-code-channel --iris-ws ws://<iris-host>:9527/ws/claude-code
+    instances:
+      - name: default
+        enabled: false
+      # WS path: /ws/claude-code (default), timeout: 900000ms (15 min)
+      # Run the CLI: claude-code-channel --iris-ws ws://<iris-host>:9527/ws/claude-code
 
