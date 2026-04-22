@@ -1,34 +1,16 @@
 import WebSocket from 'ws';
+import { type IrisMessage } from '@agent-iris/protocol';
 import type { ChannelGatewayContext } from 'openclaw/plugin-sdk/channel-contract';
 import { createChannelReplyPipeline } from 'openclaw/plugin-sdk/channel-reply-pipeline';
 import { resolveInboundRouteEnvelopeBuilderWithRuntime } from 'openclaw/plugin-sdk/inbound-envelope';
 import type { ResolvedIrisAccount, IrisInboundPayload } from './types.js';
 
 /** WS message sent from iris to openclaw */
-interface IrisWsInbound {
-  type: 'message';
-  payload: {
-    id: string;
-    channel: string;
-    channelUserId: string;
-    sessionId: string;
-    content: Array<
-      | {
-          type: 'text';
-          text: string;
-        }
-      | {
-          type: 'image_url';
-          image_url: { url: string; detail?: string };
-        }
-    >;
-  };
-  timestamp: number;
-}
+type IrisWsInbound = IrisMessage;
 
-function readInboundTextFromContentParts(content: IrisWsInbound['payload']['content']): string {
+function readInboundTextFromContentParts(content: IrisWsInbound['content']): string {
   return content
-    .filter((part): part is Extract<IrisWsInbound['payload']['content'][number], { type: 'text' }> => {
+    .filter((part): part is Extract<IrisWsInbound['content'][number], { type: 'text' }> => {
       return part.type === 'text';
     })
     .map((part) => part.text)
@@ -185,20 +167,22 @@ function connectWithReconnect(params: {
     }
 
     if (!msg || typeof msg !== 'object') return;
-    const m = msg as Record<string, unknown>;
-    if (m['type'] !== 'message') return;
-
-    const inbound = m as unknown as IrisWsInbound;
-    const inboundText = readInboundTextFromContentParts(inbound.payload.content);
+    const inbound = msg as Partial<IrisWsInbound>;
+    if (inbound.type !== 'message') return;
+    if (!Array.isArray(inbound.content)) return;
+    const inboundText = readInboundTextFromContentParts(inbound.content);
     if (!inboundText) return; // skip non-text for now
 
     const payload: IrisInboundPayload = {
-      id: inbound.payload.id,
-      channel: inbound.payload.channel,
-      channelUserId: inbound.payload.channelUserId,
-      sessionId: inbound.payload.sessionId,
-      content: { type: 'text', text: inboundText } as IrisInboundPayload['content'],
-      timestamp: inbound.timestamp,
+      id: String(inbound.id ?? ''),
+      type: inbound.type ?? 'message',
+      channel: String(inbound.channel ?? ''),
+      channelUserId: String(inbound.channelUserId ?? ''),
+      sessionId: String(inbound.sessionId ?? ''),
+      content: [{ type: 'text', text: inboundText }],
+      timestamp: typeof inbound.timestamp === 'number' ? inbound.timestamp : Date.now(),
+      raw: inbound.raw ?? { source: 'plugin-openclaw-inbound' },
+      context: inbound.context,
     };
 
     dispatchIrisMessage({
@@ -206,17 +190,17 @@ function connectWithReconnect(params: {
       payload,
       sendReply: (sessionId, text) => {
         if (ws.readyState === WebSocket.OPEN) {
+          const now = Date.now();
           ws.send(
-            JSON.stringify({
-              version: 2,
+            JSON.stringify(<IrisMessage>{
+              id: `reply-${now}`,
               type: 'message',
-              timestamp: Date.now(),
-              payload: {
-                sessionId,
-                channel: inbound.payload.channel,
-                channelUserId: inbound.payload.channelUserId,
-                content: [{ type: 'text', text }],
-              },
+              sessionId,
+              channel: String(inbound.channel ?? ''),
+              channelUserId: String(inbound.channelUserId ?? ''),
+              content: [{ type: 'text', text }],
+              timestamp: now,
+              raw: { source: 'plugin-openclaw' },
             }),
           );
         }

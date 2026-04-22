@@ -1,3 +1,5 @@
+import type { IrisMessage } from '@agent-iris/protocol';
+
 /** Iris channel config as stored in openclaw's config file (channels.iris section). */
 export interface IrisChannelConfig {
   /** WebSocket URL of the iris gateway WS server (e.g. ws://iris.example.com:9528) */
@@ -26,20 +28,5 @@ export interface ResolvedIrisAccount {
   };
 }
 
-/**
- * Inbound message payload posted by iris to openclaw's webhook.
- * Matches iris's IrisMessage type.
- */
-export interface IrisInboundPayload {
-  id: string;
-  channel: string;
-  channelUserId: string;
-  sessionId: string;
-  content: {
-    type: 'text' | 'image' | 'voice' | 'file';
-    text?: string;
-    mediaUrl?: string;
-  };
-  timestamp: number;
-  raw?: unknown;
-}
+/** Inbound payload from iris; directly reuses canonical protocol type. */
+export type IrisInboundPayload = IrisMessage;

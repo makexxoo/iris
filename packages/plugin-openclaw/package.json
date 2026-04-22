@@ -21,6 +21,7 @@
     "pack": "bun run build && bun pm pack"
   },
   "dependencies": {
+    "@agent-iris/protocol": "workspace:*",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
