@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { IrisPluginClient } from './client';
 import { logger } from './logger';
-import { IrisInboundMessage } from './types';
+import { IrisMessage } from '@agent-iris/protocol';
 
 const { values } = parseArgs({
   options: {
@@ -23,15 +23,14 @@ if (!irisWs) {
   process.exit(1);
 }
 
-const mode = ((values['mode'] as string | undefined) ?? process.env.PLUGIN_IRIS_MODE ?? 'echo').trim();
-const prefix =
-  (values['prefix'] as string | undefined) ?? process.env.PLUGIN_IRIS_PREFIX ?? '[plugin-iris] ';
-const reconnectDelayMs = Number(values['reconnect'] ?? process.env.PLUGIN_IRIS_RECONNECT_MS ?? 5000);
-
-function buildEchoReply(msg: IrisInboundMessage): string {
-  const text = msg.content.text ?? '';
-  return `${prefix}${text}`;
-}
+const mode = (
+  (values['mode'] as string | undefined) ??
+  process.env.PLUGIN_IRIS_MODE ??
+  'echo'
+).trim();
+const reconnectDelayMs = Number(
+  values['reconnect'] ?? process.env.PLUGIN_IRIS_RECONNECT_MS ?? 5000,
+);
 
 logger.info({ irisWs, mode, reconnectDelayMs }, 'starting plugin-iris');
 
@@ -39,11 +38,17 @@ const client = new IrisPluginClient({
   irisWs,
   reconnectDelayMs,
   handler: async (msg) => {
-    if (mode === 'echo') return buildEchoReply(msg);
+    if (mode === 'echo') {
+      echoReply(msg);
+      return;
+    }
     logger.warn({ mode }, 'unknown mode, fallback to echo');
-    return buildEchoReply(msg);
+    echoReply(msg);
   },
 });
+function echoReply(msg: IrisMessage) {
+  client?.send(msg);
+}
 
 client.start();
 
