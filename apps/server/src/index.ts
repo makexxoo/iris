@@ -17,7 +17,6 @@ import { OpenclawChannelBackend } from '@agent-iris/backend-openclaw-channel';
 import { ClaudeCodeChannelBackend } from '@agent-iris/backend-claude-code-channel';
 import { HermesBackend } from '@agent-iris/backend-hermes';
 import { IrisBackend } from '@agent-iris/backend-iris';
-import { MemberInfoPlugin } from '@agent-iris/plugin-member-info';
 
 const { values: argv } = parseArgs({
   options: {
@@ -46,9 +45,6 @@ async function main() {
     switch (pluginCfg.name) {
       case 'logger':
         pipeline.register(new LoggerPlugin());
-        break;
-      case 'member-info':
-        pipeline.register(new MemberInfoPlugin(pluginCfg.options as { apiUrl: string }));
         break;
       default:
         logger.warn({ plugin: pluginCfg.name }, 'unknown plugin, skipping');

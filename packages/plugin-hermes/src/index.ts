@@ -50,6 +50,7 @@ const hermesConfig: HermesConfig = {
 };
 
 const sessionManager = new SessionManager();
+const protocolVersion = 2;
 
 logger.info({ irisWs, hermesUrl }, 'plugin-hermes starting');
 
@@ -71,14 +72,43 @@ function connect(): void {
 
     const m = msg as Record<string, unknown>;
     if (m['type'] !== 'message') return;
+    const payload =
+      m['payload'] && typeof m['payload'] === 'object'
+        ? (m['payload'] as Record<string, unknown>)
+        : null;
+    if (!payload) return;
 
     handleIrisMessage({
-      msg: m as unknown as IrisWsMessage,
+      msg: {
+        type: 'message',
+        id: String(payload['messageId'] ?? ''),
+        channel: String(payload['channel'] ?? ''),
+        channelUserId: String(payload['channelUserId'] ?? ''),
+        sessionId: String(payload['sessionId'] ?? ''),
+        content: (payload['content'] as IrisWsMessage['content']) ?? { type: 'text', text: '' },
+        timestamp: typeof m['timestamp'] === 'number' ? (m['timestamp'] as number) : Date.now(),
+        context:
+          payload['context'] && typeof payload['context'] === 'object'
+            ? (payload['context'] as Record<string, unknown>)
+            : undefined,
+      },
       sessionManager,
       hermesConfig,
       sendReply: (sessionId: string, content: ReplyContent) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'reply', sessionId, content }));
+          ws.send(
+            JSON.stringify({
+              version: protocolVersion,
+              type: 'message',
+              timestamp: Date.now(),
+              payload: {
+                sessionId,
+                channel: String(payload['channel'] ?? ''),
+                channelUserId: String(payload['channelUserId'] ?? ''),
+                content: { type: 'text', text: content.filter((p) => p.type === 'text').map((p) => p.text).join('') },
+              },
+            }),
+          );
         }
       },
     });

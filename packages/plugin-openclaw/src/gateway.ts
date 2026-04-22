@@ -7,14 +7,14 @@ import type { ResolvedIrisAccount, IrisInboundPayload } from './types.js';
 /** WS message sent from iris to openclaw */
 interface IrisWsInbound {
   type: 'message';
-  id: string;
-  channel: string;
-  channelUserId: string;
-  sessionId: string;
-  content: { type: string; text?: string; mediaUrl?: string };
+  payload: {
+    messageId: string;
+    channel: string;
+    channelUserId: string;
+    sessionId: string;
+    content: { type: string; text?: string; mediaUrl?: string };
+  };
   timestamp: number;
-  context?: Record<string, unknown>;
-  history?: Array<{ role: string; content: string; timestamp?: number }>;
 }
 
 /**
@@ -168,14 +168,14 @@ function connectWithReconnect(params: {
     if (m['type'] !== 'message') return;
 
     const inbound = m as unknown as IrisWsInbound;
-    if (!inbound.content?.text) return; // skip non-text for now
+    if (!inbound.payload?.content?.text) return; // skip non-text for now
 
     const payload: IrisInboundPayload = {
-      id: inbound.id,
-      channel: inbound.channel,
-      channelUserId: inbound.channelUserId,
-      sessionId: inbound.sessionId,
-      content: inbound.content as IrisInboundPayload['content'],
+      id: inbound.payload.messageId,
+      channel: inbound.payload.channel,
+      channelUserId: inbound.payload.channelUserId,
+      sessionId: inbound.payload.sessionId,
+      content: inbound.payload.content as IrisInboundPayload['content'],
       timestamp: inbound.timestamp,
     };
 
@@ -184,7 +184,19 @@ function connectWithReconnect(params: {
       payload,
       sendReply: (sessionId, text) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'reply', sessionId, text }));
+          ws.send(
+            JSON.stringify({
+              version: 2,
+              type: 'message',
+              timestamp: Date.now(),
+              payload: {
+                sessionId,
+                channel: inbound.payload.channel,
+                channelUserId: inbound.payload.channelUserId,
+                content: { type: 'text', text },
+              },
+            }),
+          );
         }
       },
     }).catch((err) => {

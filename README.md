@@ -82,6 +82,7 @@ npx @agent-iris/server@latest -c config.yaml
 
 - [x] Claude Code
 - [x] Openclaw
+- [x] plugin-iris（自接入/外部项目集成）
 
 
 #### Claude Code

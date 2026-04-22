@@ -1,57 +1,20 @@
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
+  BackendOutboundEnvelope,
   BackendRequest,
   InboundReplyMessage,
-  MessageAttachment,
-  MessageContent,
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import {
+  SessionStateManager,
+  WebSocketSessionBackend,
+  parseBackendInboundEnvelope,
+  BACKEND_PROTOCOL_VERSION,
+} from '@agent-iris/core';
 
-const logger = pino({ name: 'backend-hermes' });
-
-function mimeToAttachmentType(mime: string): MessageAttachment['type'] {
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('audio/')) return 'audio';
-  return 'file';
-}
-
-function parseReplyContent(msg: Record<string, unknown>): MessageContent {
-  // New format: content array
-  if (Array.isArray(msg['content'])) {
-    const parts = msg['content'] as Array<Record<string, unknown>>;
-    const text = parts
-      .filter((p) => p['type'] === 'text')
-      .map((p) => String(p['text'] ?? ''))
-      .join('');
-    const attachments: MessageAttachment[] = parts
-      .filter((p) => p['type'] === 'image_url')
-      .map((p) => {
-        const imageUrl = (p['image_url'] as Record<string, unknown>) ?? {};
-        const url = String(imageUrl['url'] ?? '');
-        const detail = String(imageUrl['detail'] ?? 'file');
-        // url format: data:<mime>;base64,<data>
-        const commaIdx = url.indexOf(',');
-        const meta = commaIdx >= 0 ? url.slice(0, commaIdx) : '';
-        const base64 = commaIdx >= 0 ? url.slice(commaIdx + 1) : '';
-        const mimeType = meta.replace('data:', '').replace(';base64', '');
-        return {
-          type: mimeToAttachmentType(mimeType),
-          fileName: detail,
-          mimeType,
-          base64,
-        } satisfies MessageAttachment;
-      });
-    const type = text ? 'text' : attachments.length > 0 ? attachments[0].type : 'text';
-    return { type, text, attachments: attachments.length > 0 ? attachments : undefined };
-  }
-
-  // Old format fallback: text field
-  return { type: 'text', text: String(msg['text'] ?? '') };
-}
+const logger = pino({ name: 'backend-iris' });
 
 export interface IrisBackendConfig {
   name?: string;
@@ -68,9 +31,8 @@ export interface IrisBackendConfig {
  * This mirrors the openclaw-channel and claude-code-channel pattern exactly.
  *
  * Protocol:
- *   iris → plugin (WS): { type: 'message', id, channel, channelUserId, sessionId, content, timestamp, context }
- *   plugin → iris (WS): { type: 'reply', sessionId, content: ContentPart[] }
- *                    or (legacy): { type: 'reply', sessionId, text: string }
+ *   iris → plugin (WS): { version: 2, type: 'message', payload: { messageId, sessionId, channel, channelUserId, content, context } }
+ *   plugin → iris (WS): { version: 2, type: 'message|message_update', payload: { sessionId?, channel, channelUserId, content } }
  */
 export class IrisBackend extends WebSocketSessionBackend {
   name = 'iris';
@@ -83,37 +45,38 @@ export class IrisBackend extends WebSocketSessionBackend {
 
   protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    return JSON.stringify({
+    const envelope: BackendOutboundEnvelope = {
+      version: BACKEND_PROTOCOL_VERSION,
       type: 'message',
-      id: message.id,
-      channel: message.channel,
-      channelUserId: message.channelUserId,
-      sessionId: message.sessionId,
-      content: message.content,
       timestamp: message.timestamp,
-      context: req.context,
-    });
+      traceId: message.id,
+      payload: {
+        messageId: message.id,
+        sessionId: message.sessionId,
+        channel: message.channel,
+        channelUserId: message.channelUserId,
+        content: message.content,
+        context: req.context,
+      },
+    };
+    return JSON.stringify(envelope);
   }
 
   protected parseInboundMessage(raw: string): InboundReplyMessage | null {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
+    const parsed = parseBackendInboundEnvelope(raw);
+    if (!parsed.envelope) {
+      if (parsed.error) logger.warn({ error: parsed.error }, 'invalid backend inbound envelope');
       return null;
     }
-    if (!msg || typeof msg !== 'object') return null;
-    const m = msg as Record<string, unknown>;
-    const type = m['type'];
-    if (type !== 'reply' && type !== 'reply_update') return null;
-    const sessionId = typeof m['sessionId'] === 'string' ? (m['sessionId'] as string) : '';
-    if (!sessionId) return null;
-    const requestId = String(m['requestId'] ?? m['replyTo'] ?? m['messageId'] ?? '').trim();
+    const { type, payload } = parsed.envelope;
     return {
       type,
-      sessionId,
-      requestId: requestId || undefined,
-      content: parseReplyContent(m),
+      channel: payload.channel,
+      channelUserId: payload.channelUserId,
+      sessionId: payload.sessionId,
+      requestId: payload.requestId,
+      conversationId: payload.conversationId,
+      content: payload.content,
     };
   }
 
@@ -143,7 +106,12 @@ export class IrisBackend extends WebSocketSessionBackend {
 
   protected onUnknownReply(ctx: UnknownReplyContext): void {
     logger.warn(
-      { sessionId: ctx.sessionId, requestId: ctx.requestId },
+      {
+        sessionId: ctx.sessionId,
+        requestId: ctx.requestId,
+        channel: ctx.channel,
+        channelUserId: ctx.channelUserId,
+      },
       'received reply for unknown request',
     );
   }

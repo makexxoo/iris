@@ -1,12 +1,18 @@
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
+  BackendOutboundEnvelope,
   BackendRequest,
   InboundReplyMessage,
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import {
+  SessionStateManager,
+  WebSocketSessionBackend,
+  parseBackendInboundEnvelope as parseInboundEnvelope,
+  BACKEND_PROTOCOL_VERSION as protocolVersion,
+} from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-claude-code' });
 
@@ -25,8 +31,8 @@ export interface ClaudeCodeChannelConfig {
  * iris runs the WS server; the claude-code-channel CLI is the WS client.
  *
  * Protocol (identical to openclaw-channel):
- *   iris → CLI: { type: 'message', id, channel, channelUserId, sessionId, content, timestamp, context }
- *   CLI → iris: { type: 'reply', sessionId, text }
+ *   iris → CLI: { version: 2, type: 'message', payload: { messageId, sessionId, channel, channelUserId, content, context } }
+ *   CLI → iris: { version: 2, type: 'message|message_update', payload: { sessionId?, channel, channelUserId, content } }
  */
 export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
   name = 'claude-code';
@@ -42,37 +48,38 @@ export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
 
   protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    return JSON.stringify({
+    const envelope: BackendOutboundEnvelope = {
+      version: protocolVersion,
       type: 'message',
-      id: message.id,
-      channel: message.channel,
-      channelUserId: message.channelUserId,
-      sessionId: message.sessionId,
-      content: message.content,
       timestamp: message.timestamp,
-      context: req.context,
-    });
+      traceId: message.id,
+      payload: {
+        messageId: message.id,
+        sessionId: message.sessionId,
+        channel: message.channel,
+        channelUserId: message.channelUserId,
+        content: message.content,
+        context: req.context,
+      },
+    };
+    return JSON.stringify(envelope);
   }
 
   protected parseInboundMessage(raw: string): InboundReplyMessage | null {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
+    const parsed = parseInboundEnvelope(raw);
+    if (!parsed.envelope) {
+      if (parsed.error) logger.warn({ error: parsed.error }, 'invalid backend inbound envelope');
       return null;
     }
-    if (!msg || typeof msg !== 'object') return null;
-    const payload = msg as Record<string, unknown>;
-    const type = payload['type'];
-    const sessionId = payload['sessionId'];
-    if ((type !== 'reply' && type !== 'reply_update') || typeof sessionId !== 'string') return null;
+    const { type, payload } = parsed.envelope;
     return {
       type,
-      sessionId,
-      content: {
-        type: 'text',
-        text: typeof payload['text'] === 'string' ? (payload['text'] as string) : '',
-      },
+      channel: payload.channel,
+      channelUserId: payload.channelUserId,
+      sessionId: payload.sessionId,
+      requestId: payload.requestId,
+      conversationId: payload.conversationId,
+      content: payload.content,
     };
   }
 
@@ -101,7 +108,15 @@ export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
   }
 
   protected onUnknownReply(ctx: UnknownReplyContext): void {
-    logger.warn({ sessionId: ctx.sessionId }, 'received reply for unknown session');
+    logger.warn(
+      {
+        sessionId: ctx.sessionId,
+        requestId: ctx.requestId,
+        channel: ctx.channel,
+        channelUserId: ctx.channelUserId,
+      },
+      'received reply for unknown route',
+    );
   }
 
   close(): void {

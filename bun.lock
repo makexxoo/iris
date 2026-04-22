@@ -32,7 +32,6 @@
         "@agent-iris/channel-telegram": "workspace:*",
         "@agent-iris/channel-wechat": "workspace:*",
         "@agent-iris/core": "workspace:*",
-        "@agent-iris/plugin-member-info": "workspace:*",
       },
     },
     "packages/backend-claude-code-channel": {
@@ -163,13 +162,20 @@
         "typescript": "^5.5.3",
       },
     },
-    "packages/plugin-member-info": {
-      "name": "@agent-iris/plugin-member-info",
+    "packages/plugin-iris": {
+      "name": "@agent-iris/plugin-iris",
       "version": "0.1.0",
+      "bin": {
+        "plugin-iris": "./dist/index.js",
+      },
       "dependencies": {
-        "@agent-iris/core": "workspace:*",
-        "axios": "^1.7.2",
         "pino": "^9.3.2",
+        "pino-pretty": "^13.1.3",
+        "ws": "^8.18.0",
+      },
+      "devDependencies": {
+        "@types/ws": "^8.5.13",
+        "typescript": "^5.5.3",
       },
     },
     "packages/plugin-openclaw": {
@@ -208,7 +214,7 @@
 
     "@agent-iris/openclaw-channel": ["@agent-iris/openclaw-channel@workspace:packages/plugin-openclaw"],
 
-    "@agent-iris/plugin-member-info": ["@agent-iris/plugin-member-info@workspace:packages/plugin-member-info"],
+    "@agent-iris/plugin-iris": ["@agent-iris/plugin-iris@workspace:packages/plugin-iris"],
 
     "@agent-iris/server": ["@agent-iris/server@workspace:apps/server"],
 

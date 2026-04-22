@@ -1,12 +1,18 @@
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 import type {
+  BackendOutboundEnvelope,
   BackendRequest,
   InboundReplyMessage,
   ReplyTimeoutContext,
   UnknownReplyContext,
 } from '@agent-iris/core';
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import {
+  SessionStateManager,
+  WebSocketSessionBackend,
+  parseBackendInboundEnvelope,
+  BACKEND_PROTOCOL_VERSION,
+} from '@agent-iris/core';
 
 const logger = pino({ name: 'backend-openclaw' });
 
@@ -26,8 +32,8 @@ export interface OpenclawChannelConfig {
  * This means iris is reachable even behind NAT — openclaw initiates the connection.
  *
  * Protocol:
- *   iris → openclaw (WS): { type: 'message', id, channel, channelUserId, sessionId, content, timestamp, context, history }
- *   openclaw → iris (WS): { type: 'reply', sessionId, text }
+ *   iris → openclaw (WS): { version: 2, type: 'message', payload: { messageId, sessionId, channel, channelUserId, content, context } }
+ *   openclaw → iris (WS): { version: 2, type: 'message|message_update', payload: { sessionId?, channel, channelUserId, content } }
  *
  * chat() blocks until the reply arrives or the timeout fires.
  */
@@ -45,37 +51,38 @@ export class OpenclawChannelBackend extends WebSocketSessionBackend {
 
   protected buildOutboundPayload(req: BackendRequest): string {
     const { message } = req;
-    return JSON.stringify({
+    const envelope: BackendOutboundEnvelope = {
+      version: BACKEND_PROTOCOL_VERSION,
       type: 'message',
-      id: message.id,
-      channel: message.channel,
-      channelUserId: message.channelUserId,
-      sessionId: message.sessionId,
-      content: message.content,
       timestamp: message.timestamp,
-      context: req.context,
-    });
+      traceId: message.id,
+      payload: {
+        messageId: message.id,
+        sessionId: message.sessionId,
+        channel: message.channel,
+        channelUserId: message.channelUserId,
+        content: message.content,
+        context: req.context,
+      },
+    };
+    return JSON.stringify(envelope);
   }
 
   protected parseInboundMessage(raw: string): InboundReplyMessage | null {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
+    const parsed = parseBackendInboundEnvelope(raw);
+    if (!parsed.envelope) {
+      if (parsed.error) logger.warn({ error: parsed.error }, 'invalid backend inbound envelope');
       return null;
     }
-    if (!msg || typeof msg !== 'object') return null;
-    const payload = msg as Record<string, unknown>;
-    const type = payload['type'];
-    const sessionId = payload['sessionId'];
-    if ((type !== 'reply' && type !== 'reply_update') || typeof sessionId !== 'string') return null;
+    const { type, payload } = parsed.envelope;
     return {
       type,
-      sessionId,
-      content: {
-        type: 'text',
-        text: typeof payload['text'] === 'string' ? (payload['text'] as string) : '',
-      },
+      channel: payload.channel,
+      channelUserId: payload.channelUserId,
+      sessionId: payload.sessionId,
+      requestId: payload.requestId,
+      conversationId: payload.conversationId,
+      content: payload.content,
     };
   }
 
@@ -101,7 +108,15 @@ export class OpenclawChannelBackend extends WebSocketSessionBackend {
   }
 
   protected onUnknownReply(ctx: UnknownReplyContext): void {
-    logger.warn({ sessionId: ctx.sessionId }, 'received reply for unknown session');
+    logger.warn(
+      {
+        sessionId: ctx.sessionId,
+        requestId: ctx.requestId,
+        channel: ctx.channel,
+        channelUserId: ctx.channelUserId,
+      },
+      'received reply for unknown route',
+    );
   }
 
   close(): void {

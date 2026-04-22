@@ -1,1 +1,0 @@
-export { MemberInfoPlugin } from './plugin';

@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createServer } from 'http';
 import WebSocket from 'ws';
 import { ClaudeCodeChannelBackend } from './adapter';
-import type { BackendRequest, ChannelAdapter, IrisMessage } from '@agent-iris/core';
+import {
+  BACKEND_PROTOCOL_VERSION,
+  SessionStateManager,
+  type BackendRequest,
+  type ChannelAdapter,
+  type IrisMessage,
+} from '@agent-iris/core';
 
 function makeRequest(
   sessionId: string,
@@ -33,7 +39,7 @@ describe('ClaudeCodeChannelBackend', () => {
   let httpServer: ReturnType<typeof createServer>;
 
   beforeEach(async () => {
-    backend = new ClaudeCodeChannelBackend({ timeoutMs: 500 });
+    backend = new ClaudeCodeChannelBackend({ timeoutMs: 500 }, new SessionStateManager(60_000));
     httpServer = createServer();
     backend.attach(httpServer);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
@@ -58,7 +64,19 @@ describe('ClaudeCodeChannelBackend', () => {
 
     // Simulate CLI sending back a reply
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    ws.send(JSON.stringify({ type: 'reply', sessionId: 'session-1', text: 'hello back' }));
+    ws.send(
+      JSON.stringify({
+        version: BACKEND_PROTOCOL_VERSION,
+        type: 'message',
+        timestamp: Date.now(),
+        payload: {
+          sessionId: 'session-1',
+          channel: 'feishu',
+          channelUserId: 'user-1',
+          content: { type: 'text', text: 'hello back' },
+        },
+      }),
+    );
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
     expect(replyText).toEqual('hello back');

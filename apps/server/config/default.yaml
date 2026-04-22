@@ -103,4 +103,7 @@ backends:
     instances:
       - name: iris-default
         enabled: true
+      # WS path: /ws/iris (default)
+      # Run plugin-iris:
+      #   npx -y @agent-iris/plugin-iris --iris-ws ws://<iris-host>:9527/ws/iris --mode echo
 

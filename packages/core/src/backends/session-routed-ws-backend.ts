@@ -9,9 +9,12 @@ export interface BackendChatRequest extends BackendRequest {
 }
 
 export interface InboundReplyMessage {
-  type: 'reply' | 'reply_update';
-  sessionId: string;
+  type: 'message' | 'message_update';
+  channel: string;
+  channelUserId: string;
+  sessionId?: string;
   requestId?: string;
+  conversationId?: string;
   content: MessageContent;
 }
 
@@ -23,8 +26,11 @@ export interface ReplyTimeoutContext {
 }
 
 export interface UnknownReplyContext {
-  sessionId: string;
+  sessionId?: string;
   requestId?: string;
+  channel: string;
+  channelUserId: string;
+  conversationId?: string;
 }
 
 export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdapter {
@@ -42,27 +48,35 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
 
   async chat(req: BackendChatRequest): Promise<void> {
     const { message, channelAdapter } = req;
-    const sessionId = message.sessionId;
     const requestId = message.id;
+    const sessionId = this.sessionStates.resolveReusableSessionId({
+      backendName: this.name,
+      channel: message.channel,
+      channelUserId: message.channelUserId,
+      fallbackSessionId: message.sessionId,
+    });
+    const resolvedMessage = { ...message, sessionId };
 
     const connection = this.resolveConnection(sessionId);
     if (!connection) throw new Error(this.noConnectionErrorMessage());
 
-    const payload = this.buildOutboundPayload(req);
+    const payload = this.buildOutboundPayload({ ...req, message: resolvedMessage });
     this.sessionStates.upsert({
+      backendName: this.name,
       sessionId,
-      message: { ...message },
+      requestId,
+      message: resolvedMessage,
       channelAdapter,
       responseTimeoutMs: this.timeoutMs,
       onResponseTimeout: async () => {
-        await this.onReplyTimeout({ sessionId, requestId, message, channelAdapter });
+        await this.onReplyTimeout({ sessionId, requestId, message: resolvedMessage, channelAdapter });
       },
     });
 
     try {
       await this.sendPayload(connection, payload);
     } catch (err) {
-      this.sessionStates.markResponseEnded(sessionId);
+      this.sessionStates.markResponseEnded(this.name, sessionId);
       throw err;
     }
   }
@@ -72,26 +86,49 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     if (!inbound) return;
 
     const { sessionId, requestId } = inbound;
-    const state = this.sessionStates.get(sessionId);
+    const state = this.sessionStates.resolveInboundState({
+      backendName: this.name,
+      sessionId,
+      requestId,
+      channel: inbound.channel,
+      channelUserId: inbound.channelUserId,
+    });
     if (!state) {
-      if (this.sessionStates.shouldWarnUnknown(sessionId, requestId)) {
-        this.onUnknownReply({ sessionId, requestId });
+      if (
+        this.sessionStates.shouldWarnUnknown({
+          backendName: this.name,
+          sessionId,
+          requestId,
+          channel: inbound.channel,
+          channelUserId: inbound.channelUserId,
+        })
+      ) {
+        this.onUnknownReply({
+          sessionId,
+          requestId,
+          channel: inbound.channel,
+          channelUserId: inbound.channelUserId,
+          conversationId: inbound.conversationId,
+        });
       }
       return;
     }
 
     if (this.isConnectionOpen(connection)) {
-      this.sessionToConnection.set(sessionId, connection);
+      this.sessionToConnection.set(state.sessionId, connection);
     }
 
     await state.channelAdapter.reply({
       ...state.message,
+      channel: inbound.channel,
+      channelUserId: inbound.channelUserId,
+      sessionId: inbound.sessionId ?? state.sessionId,
       content: inbound.content,
       timestamp: Date.now(),
     });
 
-    if (inbound.type === 'reply') {
-      this.sessionStates.markFinal(sessionId, requestId);
+    if (inbound.type === 'message' && state.sessionId) {
+      this.sessionStates.markFinal(this.name, state.sessionId, requestId);
     }
   }
 
