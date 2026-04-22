@@ -22,7 +22,6 @@
   },
   "devDependencies": {
     "@agent-iris/core": "workspace:*",
-    "@agent-iris/channel-telegram": "workspace:*",
     "@agent-iris/channel-feishu": "workspace:*",
     "@agent-iris/channel-wechat": "workspace:*",
     "@agent-iris/backend-openclaw-channel": "workspace:*",
