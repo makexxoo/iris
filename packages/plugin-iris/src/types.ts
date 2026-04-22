@@ -1,13 +1,10 @@
 import type { IrisMessage, MessageContentPart } from '@agent-iris/protocol';
-export type MessageType = IrisMessage['type'];
 
 export interface MessageContent {
   type: 'text';
   text: string;
 }
 
-export type InboundPayload = IrisMessage;
-export type OutboundPayload = IrisMessage;
 export type IrisInboundEnvelope = IrisMessage;
 export type IrisOutboundEnvelope = IrisMessage;
 
