@@ -1,4 +1,4 @@
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 export interface OpenclawChannelConfig {
   /**名称，用于区分多个openclaw*/
@@ -24,12 +24,9 @@ export interface OpenclawChannelConfig {
 export class OpenclawChannelBackend extends WebSocketSessionBackend {
   name = 'openclaw';
 
-  constructor(
-    private config: OpenclawChannelConfig,
-    sessionStates: SessionStateManager,
-  ) {
+  constructor(private config: OpenclawChannelConfig) {
     const timeoutMs = config.timeoutMs ?? 60_000;
-    super(timeoutMs, sessionStates, config.wsPath ?? "'/ws/openclaw'");
+    super(timeoutMs, config.wsPath ?? "'/ws/openclaw'");
     this.name = config.name ?? 'openclaw';
   }
 }

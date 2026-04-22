@@ -2,7 +2,6 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import type { Duplex } from 'stream';
 import { SessionRoutedWsBackend } from './session-routed-ws-backend';
-import { SessionStateManager } from './session-state-manager';
 import pino from 'pino';
 
 const logger = pino({ name: 'backend-ws' });
@@ -16,8 +15,8 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
 
   protected path: string;
 
-  protected constructor(timeoutMs: number, sessionStates: SessionStateManager, path: string) {
-    super(timeoutMs, sessionStates);
+  protected constructor(timeoutMs: number, path: string) {
+    super(timeoutMs);
     this.path = path;
   }
 

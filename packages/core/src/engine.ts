@@ -1,27 +1,22 @@
 import { randomUUID } from 'crypto';
 import pino from 'pino';
 import { IrisMessage, PluginContext } from './message';
-import { ChannelAdapter } from './channels/types';
 import { BackendAdapter } from './backends/types';
 import { PluginPipeline } from './plugins/pipeline';
 import { IrisConfig } from './config';
+import { channelAdapterRegistry } from './channels/registry';
 
 const logger = pino({ name: 'iris:engine' });
 
 export type MessageHandler = (message: IrisMessage) => Promise<void>;
 
 export class MessageEngine {
-  private channelAdapters: Array<ChannelAdapter> = [];
   private backendAdapters = new Map<string, BackendAdapter>();
 
   constructor(
     private pipeline: PluginPipeline,
     private config: IrisConfig,
   ) {}
-
-  registerChannel(adapter: ChannelAdapter): void {
-    this.channelAdapters.push(adapter);
-  }
 
   registerBackend(adapter: BackendAdapter): void {
     this.backendAdapters.set(adapter.name, adapter);
@@ -59,9 +54,7 @@ export class MessageEngine {
     };
     await this.pipeline.run(ctx);
 
-    const channelAdapter = this.channelAdapters.find((item) => {
-      return item.support(message);
-    });
+    const channelAdapter = channelAdapterRegistry.resolveByMessage(message);
 
     if (!channelAdapter) {
       logger.error({ channel: message.channel }, 'channel adapter not found for reply');

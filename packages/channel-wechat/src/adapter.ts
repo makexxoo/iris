@@ -146,15 +146,17 @@ export class WechatAdapter implements ChannelAdapter {
 
   /** Reply to a message that was received via a known AccountConnection. */
   async reply(message: IrisMessage): Promise<void> {
-    const raw = message.raw as { accountId: string; toUserId: string };
-    const conn = this.connections.get(raw.accountId);
+    const channelUserId = message.channelUserId;
+    const accountId = channelUserId.split(':')[0];
+    const toUserId = message.channelUserId.split(':')[1];
+    const conn = this.connections.get(accountId);
     if (!conn) {
-      logger.error({ accountId: raw.accountId }, 'wechat: no connection for accountId');
+      logger.error({ channelUserId }, 'wechat: no connection for accountId');
       return;
     }
 
     const text = extractTextFromContentParts(message.content);
-    if (text) await conn.sendText(raw.toUserId, text);
+    if (text) await conn.sendText(toUserId, text);
 
     for (const part of message.content) {
       try {
@@ -163,18 +165,18 @@ export class WechatAdapter implements ChannelAdapter {
           if (comma < 0) continue;
           const base64 = part.image_url.url.slice(comma + 1);
           const buf = Buffer.from(base64, 'base64');
-          await conn.sendFile(raw.toUserId, buf, part.image_url.detail ?? 'image', 'image/*');
+          await conn.sendFile(toUserId, buf, part.image_url.detail ?? 'image', 'image/*');
           continue;
         }
         if (part.type === 'input_audio') {
           const buf = Buffer.from(part.input_audio.data, 'base64');
-          await conn.sendFile(raw.toUserId, buf, 'audio', part.input_audio.format ?? 'audio/*');
+          await conn.sendFile(toUserId, buf, 'audio', part.input_audio.format ?? 'audio/*');
           continue;
         }
         if (part.type === 'file' && part.file.file_data) {
           const buf = Buffer.from(part.file.file_data, 'base64');
           await conn.sendFile(
-            raw.toUserId,
+            toUserId,
             buf,
             part.file.filename ?? 'file',
             part.file.mimetype ?? 'application/octet-stream',
@@ -184,29 +186,6 @@ export class WechatAdapter implements ChannelAdapter {
         logger.error({ err }, 'wechat: failed to send content part');
       }
     }
-  }
-
-  /**
-   * Send a proactive message by channelUserId.
-   * channelUserId format: "{accountId}:{fromUserId}"
-   */
-  async replyToUser(channelUserId: string, text: string): Promise<void> {
-    const sepIdx = channelUserId.indexOf(':');
-    if (sepIdx === -1) {
-      logger.error(
-        { channelUserId },
-        'wechat: invalid channelUserId format (expected accountId:userId)',
-      );
-      return;
-    }
-    const accountId = channelUserId.slice(0, sepIdx);
-    const userId = channelUserId.slice(sepIdx + 1);
-    const conn = this.connections.get(accountId);
-    if (!conn) {
-      logger.error({ accountId }, 'wechat: no connection for accountId');
-      return;
-    }
-    await conn.sendText(userId, text);
   }
 
   // -------------------------------------------------------------------------

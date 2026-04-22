@@ -45,27 +45,4 @@ export class FeishuAdapter implements ChannelAdapter {
     }
     await conn.sendToChat(raw.message.chat_id, extractTextFromContentParts(message.content));
   }
-
-  /**
-   * Send a proactive message by channelUserId.
-   * channelUserId format: "{appId}:{openId}"
-   */
-  async replyToUser(channelUserId: string, text: string): Promise<void> {
-    const sepIdx = channelUserId.indexOf(':');
-    if (sepIdx === -1) {
-      logger.error(
-        { channelUserId },
-        'feishu: invalid channelUserId format (expected appId:openId)',
-      );
-      return;
-    }
-    const appId = channelUserId.slice(0, sepIdx);
-    const openId = channelUserId.slice(sepIdx + 1);
-    const conn = this.connections.get(appId);
-    if (!conn) {
-      logger.error({ appId }, 'feishu: no connection for appId');
-      return;
-    }
-    await conn.sendToOpenId(openId, text);
-  }
 }

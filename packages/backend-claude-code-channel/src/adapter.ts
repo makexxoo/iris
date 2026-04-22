@@ -1,4 +1,4 @@
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 export interface ClaudeCodeChannelConfig {
   /** Name used for routing in MessageEngine (default: 'claude-code') */
@@ -21,12 +21,9 @@ export interface ClaudeCodeChannelConfig {
 export class ClaudeCodeChannelBackend extends WebSocketSessionBackend {
   name = 'claude-code';
 
-  constructor(
-    private config: ClaudeCodeChannelConfig,
-    sessionStates: SessionStateManager,
-  ) {
+  constructor(private config: ClaudeCodeChannelConfig) {
     const timeoutMs = config.timeoutMs ?? 900_000;
-    super(timeoutMs, sessionStates, config.wsPath ?? '/ws/claude-code');
+    super(timeoutMs, config.wsPath ?? '/ws/claude-code');
     this.name = config.name ?? 'claude-code';
   }
 }

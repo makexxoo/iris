@@ -1,7 +1,7 @@
 import { BackendAdapter } from './types.js';
-import { SessionStateManager } from './session-state-manager.js';
 import { BackendRequest, IrisMessage } from '../message.js';
 import { ChannelAdapter } from '../channels/types.js';
+import { channelAdapterRegistry } from '../channels/registry.js';
 import type { IncomingMessage, Server } from 'http';
 import pino from 'pino';
 
@@ -24,52 +24,71 @@ export interface UnknownReplyContext {
 export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdapter {
   private readonly connections = new Set<TConnection>();
   private readonly sessionToConnection = new Map<string, TConnection>();
+  private readonly pendingByRequestId = new Map<
+    string,
+    {
+      sessionId: string;
+      message: BackendRequest['message'];
+      channelAdapter: ChannelAdapter;
+      timeout: ReturnType<typeof setTimeout>;
+      requestId: string;
+    }
+  >();
+  private readonly pendingByRoute = new Map<
+    string,
+    {
+      sessionId: string;
+      message: BackendRequest['message'];
+      channelAdapter: ChannelAdapter;
+      timeout: ReturnType<typeof setTimeout>;
+      requestId: string;
+    }
+  >();
+  private readonly unknownWarnAt = new Map<string, number>();
 
   abstract name: string;
 
-  protected constructor(
-    private readonly timeoutMs: number,
-    private readonly sessionStates: SessionStateManager,
-  ) {}
+  protected constructor(private readonly timeoutMs: number) {}
 
   abstract attach(httpServer: Server<typeof IncomingMessage>): void;
 
   async chat(req: BackendRequest): Promise<void> {
     const { message, channelAdapter } = req;
     const requestId = message.id;
-    const sessionId = this.sessionStates.resolveReusableSessionId({
-      backendName: this.name,
-      channel: message.channel,
-      channelUserId: message.channelUserId,
-      fallbackSessionId: message.sessionId,
-    });
-    const resolvedMessage = { ...message, sessionId };
+    const sessionId = message.sessionId;
 
     const connection = this.resolveConnection(sessionId);
     if (!connection) throw new Error(this.noConnectionErrorMessage());
 
-    const payload = JSON.stringify(req.message);
-    this.sessionStates.upsert({
-      backendName: this.name,
+    const payload = JSON.stringify({ ...req.message, sessionId });
+    const timeout = setTimeout(() => {
+      void this.onReplyTimeout({
+        sessionId,
+        requestId,
+        message: { ...message, sessionId },
+        channelAdapter,
+      });
+      this.pendingByRequestId.delete(requestId);
+      this.pendingByRoute.delete(this.routeKey(message.channel, message.channelUserId));
+    }, this.timeoutMs);
+    const pending = {
       sessionId,
-      requestId,
-      message: resolvedMessage,
+      message: { ...message, sessionId },
       channelAdapter,
-      responseTimeoutMs: this.timeoutMs,
-      onResponseTimeout: async () => {
-        await this.onReplyTimeout({
-          sessionId,
-          requestId,
-          message: resolvedMessage,
-          channelAdapter,
-        });
-      },
-    });
+      timeout,
+      requestId,
+    };
+    this.pendingByRequestId.set(requestId, pending);
+    this.pendingByRoute.set(this.routeKey(message.channel, message.channelUserId), pending);
 
     try {
       await this.sendPayload(connection, payload);
     } catch (err) {
-      this.sessionStates.markResponseEnded(this.name, sessionId);
+      const pending = this.pendingByRequestId.get(requestId);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pendingByRequestId.delete(requestId);
+      }
       throw err;
     }
   }
@@ -80,23 +99,24 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
 
     const sessionId = inbound.sessionId;
     const requestId = inbound.id;
-    const state = this.sessionStates.resolveInboundState({
-      backendName: this.name,
-      sessionId,
-      requestId,
-      channel: inbound.channel,
-      channelUserId: inbound.channelUserId,
-    });
-    if (!state) {
-      if (
-        this.sessionStates.shouldWarnUnknown({
-          backendName: this.name,
-          sessionId,
-          requestId,
-          channel: inbound.channel,
-          channelUserId: inbound.channelUserId,
-        })
-      ) {
+    const pending =
+      (requestId ? this.pendingByRequestId.get(requestId) : undefined) ??
+      this.pendingByRoute.get(this.routeKey(inbound.channel, inbound.channelUserId));
+    if (!pending) {
+      const proactiveAdapter = channelAdapterRegistry.resolveByMessage(inbound);
+      if (proactiveAdapter) {
+        await proactiveAdapter.reply({
+          ...inbound,
+          raw: inbound.raw ?? { source: `${this.name}-proactive` },
+          timestamp: inbound.timestamp || Date.now(),
+        });
+        return;
+      }
+      const unknownKey = `${this.name}::${requestId ?? ''}::${sessionId}::${inbound.channel}::${inbound.channelUserId}`;
+      const now = Date.now();
+      const lastWarnAt = this.unknownWarnAt.get(unknownKey) ?? 0;
+      if (now - lastWarnAt > 60_000) {
+        this.unknownWarnAt.set(unknownKey, now);
         this.onUnknownReply({
           sessionId,
           requestId,
@@ -106,21 +126,20 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
       }
       return;
     }
+    clearTimeout(pending.timeout);
+    this.pendingByRequestId.delete(pending.requestId);
+    this.pendingByRoute.delete(this.routeKey(inbound.channel, inbound.channelUserId));
 
     if (this.isConnectionOpen(connection)) {
-      this.sessionToConnection.set(state.sessionId, connection);
+      this.sessionToConnection.set(pending.sessionId, connection);
     }
 
-    await state.channelAdapter.reply({
+    await pending.channelAdapter.reply({
       ...inbound,
-      sessionId: inbound.sessionId || state.sessionId,
-      raw: inbound.raw ?? state.message.raw,
+      sessionId: inbound.sessionId || pending.sessionId,
+      raw: inbound.raw ?? pending.message.raw,
       timestamp: inbound.timestamp || Date.now(),
     });
-
-    if (state.sessionId) {
-      this.sessionStates.markFinal(this.name, state.sessionId, requestId);
-    }
   }
 
   protected forgetConnection(connection: TConnection): void {
@@ -139,9 +158,14 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
   }
 
   protected clearState(): void {
-    this.sessionStates.clear();
+    for (const pending of this.pendingByRequestId.values()) {
+      clearTimeout(pending.timeout);
+    }
+    this.pendingByRequestId.clear();
+    this.pendingByRoute.clear();
     this.sessionToConnection.clear();
     this.connections.clear();
+    this.unknownWarnAt.clear();
   }
 
   protected abstract isConnectionOpen(connection: TConnection): boolean;
@@ -186,6 +210,10 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
       return conn;
     }
     return null;
+  }
+
+  private routeKey(channel: string, channelUserId: string): string {
+    return `${channel}::${channelUserId}`;
   }
 
   private parseInboundMessage(raw: string): IrisMessage | undefined {

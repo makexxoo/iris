@@ -1,4 +1,4 @@
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 export interface IrisBackendConfig {
   name?: string;
@@ -21,9 +21,9 @@ export interface IrisBackendConfig {
 export class IrisBackend extends WebSocketSessionBackend {
   name = 'iris';
 
-  constructor(config: IrisBackendConfig, sessionStates: SessionStateManager) {
+  constructor(config: IrisBackendConfig) {
     const timeoutMs = config.timeoutMs ?? 300_000;
-    super(timeoutMs, sessionStates, config.wsPath ?? '/ws/iris');
+    super(timeoutMs, config.wsPath ?? '/ws/iris');
     this.name = config.name ?? 'iris';
   }
 }

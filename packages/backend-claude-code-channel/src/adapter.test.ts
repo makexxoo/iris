@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import WebSocket from 'ws';
 import { ClaudeCodeChannelBackend } from './adapter';
 import {
-  SessionStateManager,
   extractTextFromContentParts,
   type BackendRequest,
   type ChannelAdapter,
@@ -40,7 +39,7 @@ describe('ClaudeCodeChannelBackend', () => {
   let httpServer: ReturnType<typeof createServer>;
 
   beforeEach(async () => {
-    backend = new ClaudeCodeChannelBackend({ timeoutMs: 500 }, new SessionStateManager(60_000));
+    backend = new ClaudeCodeChannelBackend({ timeoutMs: 500 });
     httpServer = createServer();
     backend.attach(httpServer);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));

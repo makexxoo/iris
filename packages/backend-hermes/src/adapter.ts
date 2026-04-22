@@ -1,4 +1,4 @@
-import { SessionStateManager, WebSocketSessionBackend } from '@agent-iris/core';
+import { WebSocketSessionBackend } from '@agent-iris/core';
 
 export interface HermesBackendConfig {
   name?: string;
@@ -21,9 +21,9 @@ export interface HermesBackendConfig {
 export class HermesBackend extends WebSocketSessionBackend {
   name = 'hermes';
 
-  constructor(config: HermesBackendConfig, sessionStates: SessionStateManager) {
+  constructor(config: HermesBackendConfig) {
     const timeoutMs = config.timeoutMs ?? 300_000;
-    super(timeoutMs, sessionStates, config.wsPath ?? '/ws/hermes');
+    super(timeoutMs, config.wsPath ?? '/ws/hermes');
     this.name = config.name ?? 'hermes';
   }
 }

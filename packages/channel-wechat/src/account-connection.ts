@@ -355,6 +355,7 @@ export class AccountConnection {
 
     const irisMessage: IrisMessage = {
       id: randomUUID(),
+      type: 'message',
       channel: this.config.groupName,
       // channelUserId format: "{accountId}:{fromUserId}" for routing in replyToUser
       channelUserId: `${this.accountId}:${senderId}`,

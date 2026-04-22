@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { IrisMessage } from '../message';
 
 export interface ChannelAdapter {
@@ -19,9 +19,4 @@ export interface ChannelAdapter {
   parse?(req: FastifyRequest, reply: FastifyReply): Promise<IrisMessage | null>;
   /** Send the AI reply back to the user via the channel's API (uses original message context) */
   reply(message: IrisMessage): Promise<void>;
-  /**
-   * Send a reply to a user by channelUserId alone, without the original message context.
-   * Used by async delivery paths (e.g. proactive outbound via /v1/outbound).
-   */
-  replyToUser?(channelUserId: string, text: string): Promise<void>;
 }

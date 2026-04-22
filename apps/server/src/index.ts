@@ -3,13 +3,12 @@ import pino from 'pino';
 import { parseArgs } from 'node:util';
 import {
   BackendAdapter,
-  ChannelAdapter,
+  channelAdapterRegistry,
   createServer,
   loadConfig,
   LoggerPlugin,
   MessageEngine,
   PluginPipeline,
-  SessionStateManager,
 } from '@agent-iris/core';
 import { FeishuAdapter } from '@agent-iris/channel-feishu';
 import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wechat';
@@ -59,18 +58,13 @@ async function main() {
   // --- Backend adapters ---
   const attachableBackends: BackendAdapter[] = [];
 
-  const sessionStates = new SessionStateManager(10 * 60 * 1000);
-
   for (const instance of config.backends.openclaw?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new OpenclawChannelBackend(
-      {
-        name: instance.name,
-        timeoutMs: instance.timeoutMs,
-        wsPath: instance.wsPath,
-      },
-      sessionStates,
-    );
+    const backend = new OpenclawChannelBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -81,14 +75,11 @@ async function main() {
 
   for (const instance of config.backends['claude-code']?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new ClaudeCodeChannelBackend(
-      {
-        name: instance.name,
-        timeoutMs: instance.timeoutMs,
-        wsPath: instance.wsPath,
-      },
-      sessionStates,
-    );
+    const backend = new ClaudeCodeChannelBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -99,14 +90,11 @@ async function main() {
 
   for (const instance of config.backends.hermes?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new HermesBackend(
-      {
-        name: instance.name,
-        timeoutMs: instance.timeoutMs,
-        wsPath: instance.wsPath,
-      },
-      sessionStates,
-    );
+    const backend = new HermesBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -117,14 +105,11 @@ async function main() {
 
   for (const instance of config.backends.iris?.instances ?? []) {
     if (instance.enabled === false) continue;
-    const backend = new IrisBackend(
-      {
-        name: instance.name,
-        timeoutMs: instance.timeoutMs,
-        wsPath: instance.wsPath,
-      },
-      sessionStates,
-    );
+    const backend = new IrisBackend({
+      name: instance.name,
+      timeoutMs: instance.timeoutMs,
+      wsPath: instance.wsPath,
+    });
     router.registerBackend(backend);
     attachableBackends.push(backend);
     logger.info(
@@ -134,14 +119,12 @@ async function main() {
   }
 
   // --- Channel adapters (array form) ---
-  const activeChannels: ChannelAdapter[] = [];
 
   // 顶级 wechat 配置 → 创建单例 WechatAdapter（注册 HTTP 路由）
   let wechatAdapter: WechatAdapter | undefined;
   if (config.wechat?.enabled !== false) {
     wechatAdapter = new WechatAdapter(config.wechat ?? {}, router.handle);
-    router.registerChannel(wechatAdapter);
-    activeChannels.push(wechatAdapter);
+    channelAdapterRegistry.register(wechatAdapter);
     logger.info('wechat: global adapter created');
   }
 
@@ -157,8 +140,7 @@ async function main() {
           { name: channelCfg.name, apps: channelCfg.apps },
           router.handle,
         );
-        router.registerChannel(feishu);
-        activeChannels.push(feishu);
+        channelAdapterRegistry.register(feishu);
         logger.info({ name: channelCfg.name, type: channelCfg.type }, 'channel registered');
         break;
       }
@@ -198,9 +180,7 @@ async function main() {
   // --- HTTP server ---
   const server = createServer(router);
 
-  for (const channel of activeChannels) {
-    channel.register(server);
-  }
+  channelAdapterRegistry.run(server);
 
   // Attach WS backends to the shared HTTP server (no separate port needed)
   for (const backend of attachableBackends) {
