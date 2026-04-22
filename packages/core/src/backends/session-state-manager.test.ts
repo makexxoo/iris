@@ -15,6 +15,7 @@ function mockChannelAdapter(): ChannelAdapter {
 function mockMessage(sessionId: string): IrisMessage {
   return {
     id: `msg-${sessionId}`,
+    type: 'message',
     channel: 'feishu',
     channelUserId: 'user-1',
     sessionId,
