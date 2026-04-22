@@ -1,13 +1,23 @@
 {
   "name": "@agent-iris/plugin-iris",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Generic iris protocol plugin client (self-connect and external integration)",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./client": "./dist/client.js",
-    "./types": "./dist/types.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
   },
   "bin": {
     "plugin-iris": "./dist/index.js"
@@ -20,7 +30,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "NODE_ENV=production bun build src/index.ts src/client.ts src/types.ts --outdir dist --target node --sourcemap=external --define 'process.env.NODE_ENV=\"production\"' && chmod +x dist/index.js && tsc --noEmit",
+    "build": "NODE_ENV=production bun build src/index.ts src/client.ts src/types.ts --outdir dist --target node --sourcemap=external --define 'process.env.NODE_ENV=\"production\"' && chmod +x dist/index.js && tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "prepublishOnly": "bun run build",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"
