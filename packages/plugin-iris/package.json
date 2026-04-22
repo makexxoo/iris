@@ -1,6 +1,6 @@
 {
   "name": "@agent-iris/plugin-iris",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Generic iris protocol plugin client (self-connect and external integration)",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,7 +20,7 @@
     }
   },
   "bin": {
-    "plugin-iris": "./dist/index.js"
+    "plugin-iris": "./dist/cli.js"
   },
   "files": [
     "dist"
@@ -29,8 +29,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "bun run src/index.ts",
-    "build": "NODE_ENV=production bun build src/index.ts src/client.ts src/types.ts --outdir dist --target node --sourcemap=external --define 'process.env.NODE_ENV=\"production\"' && chmod +x dist/index.js && tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist",
+    "dev": "bun run src/cli.ts",
+    "build": "NODE_ENV=production bun build src/index.ts src/client.ts src/types.ts src/cli.ts --outdir dist --target node --sourcemap=external --define 'process.env.NODE_ENV=\"production\"' && chmod +x dist/cli.js && tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "prepublishOnly": "bun run build",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"
