@@ -1,14 +1,13 @@
-import { BackendRequest, MessageContent } from '../message';
+import { BackendRequest } from '../message';
 import type { IncomingMessage, Server } from 'http';
 
 export interface BackendAdapter {
   name: string;
   /**
    * Send the enriched request to the AI backend.
-   * - sync backend: return MessageContent and let engine reply
-   * - async backend: return void and reply via channelAdapter directly
+   * Backends are async-only: they acknowledge delivery and send replies later via channelAdapter.
    */
-  chat(req: BackendRequest): Promise<MessageContent | void>;
+  chat(req: BackendRequest): Promise<void>;
 
   /**
    * Attach this backend's WS handler to an existing HTTP server.

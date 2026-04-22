@@ -75,38 +75,26 @@ export class MessageEngine {
     const backend = this.backendAdapters.get(backendName);
     if (!backend) {
       logger.error({ backendName }, 'backend not found');
-      message.content = {
-        type: 'text',
-        text: `backend not found: ${backendName}. 请联系管理员为您配置智能体`,
-      };
+      message.content = [
+        {
+          type: 'text',
+          text: `backend not found: ${backendName}. 请联系管理员为您配置智能体`,
+        },
+      ];
       await channelAdapter.reply(message);
       return;
     }
 
     try {
-      const reply = await backend.chat({
+      await backend.chat({
         message,
         context: ctx.business,
         channelAdapter,
       });
-
-      // Async backend may already send the reply via channelAdapter.reply().
-      if (reply) {
-        message.content = reply;
-        logger.info({ channel: message.channel, backendName }, 'got sync reply, sending back');
-        await channelAdapter.reply(message);
-      } else {
-        logger.info(
-          { channel: message.channel, backendName },
-          'backend accepted message in async mode',
-        );
-      }
+      logger.info({ channel: message.channel, backendName }, 'backend accepted message in async mode');
     } catch (e) {
       logger.info({ channel: message.channel, backendName, error: e }, '智能体处理失败');
-      message.content = {
-        type: 'text',
-        text: `智能体调用失败: ${e}`,
-      };
+      message.content = [{ type: 'text', text: `智能体调用失败: ${e}` }];
       await channelAdapter.reply(message);
     }
   }

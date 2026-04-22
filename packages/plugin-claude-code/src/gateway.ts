@@ -51,7 +51,16 @@ export interface IrisWsMessage {
   channel: string;
   channelUserId: string;
   sessionId: string;
-  content: { type: string; text?: string };
+  content: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'image_url';
+        image_url: { url: string; detail?: string };
+      }
+  >;
   timestamp: number;
   context?: Record<string, unknown>;
 }
@@ -179,7 +188,12 @@ export function handleIrisMessage(params: {
   const { sessionId } = msg;
 
   sessionManager.enqueue(sessionId, async () => {
-    const prompt = msg.content.text ?? '';
+    const prompt = msg.content
+      .filter((part): part is Extract<IrisWsMessage['content'][number], { type: 'text' }> => {
+        return part.type === 'text';
+      })
+      .map((part) => part.text)
+      .join('');
     if (!prompt) {
       logger.warn({ sessionId }, 'empty message text, skipping');
       return;

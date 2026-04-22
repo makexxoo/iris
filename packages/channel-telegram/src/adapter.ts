@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import TelegramBot from 'node-telegram-bot-api';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { IrisMessage, ChannelAdapter, MessageEngine } from '@agent-iris/core';
+import { IrisMessage, ChannelAdapter, MessageEngine, extractTextFromContentParts } from '@agent-iris/core';
 
 interface TelegramConfig {
   botToken: string;
@@ -42,7 +42,7 @@ export class TelegramAdapter implements ChannelAdapter {
       channel: 'telegram',
       channelUserId: userId,
       sessionId: `telegram:${userId}`,
-      content: { type: 'text', text: msg.text },
+      content: [{ type: 'text', text: msg.text }],
       timestamp: (msg.date ?? Math.floor(Date.now() / 1000)) * 1000,
       raw: update,
     };
@@ -52,7 +52,7 @@ export class TelegramAdapter implements ChannelAdapter {
     const rawUpdate = message.raw as TelegramBot.Update;
     const chatId = rawUpdate.message?.chat.id;
     if (chatId === undefined) return;
-    await this.bot.sendMessage(chatId, message.content.text ?? '');
+    await this.bot.sendMessage(chatId, extractTextFromContentParts(message.content));
   }
 
   async replyToUser(channelUserId: string, text: string): Promise<void> {

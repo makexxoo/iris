@@ -18,7 +18,7 @@ function mockMessage(sessionId: string): IrisMessage {
     channel: 'feishu',
     channelUserId: 'user-1',
     sessionId,
-    content: { type: 'text', text: 'hello' },
+    content: [{ type: 'text', text: 'hello' }],
     timestamp: Date.now(),
     raw: {},
   };

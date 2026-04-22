@@ -16,9 +16,9 @@ Session key:
 
 - `backendName + sessionId`
 
-Request key:
+Message key:
 
-- `backendName + requestId` (optional index)
+- `backendName + messageId` (from `IrisMessage.id`)
 
 ## Data flow
 
@@ -50,7 +50,7 @@ For `message|message_update` inbound:
 1. Validate V2 envelope and required payload fields.
 2. Resolve state with fallback order:
    - `sessionId`
-   - `requestId`
+   - `messageId`
    - `channel + channelUserId`
 3. If found, forward to `channelAdapter.reply`.
 4. If not found, emit unknown-route warning with structured fields.
@@ -58,5 +58,5 @@ For `message|message_update` inbound:
 ## Operational notes
 
 - `channelUserId` must be platform native user id.
-- `requestId` is optional by product decision; tracing should rely on `traceId`.
+- `IrisMessage.id` is the unified message/request key across routing and tracing.
 - Unknown-route suppression is retained to avoid log storms.

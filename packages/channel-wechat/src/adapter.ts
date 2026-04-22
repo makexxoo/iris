@@ -1,5 +1,6 @@
 import pino from 'pino';
 import type { ChannelAdapter, IrisMessage, MessageHandler } from '@agent-iris/core';
+import { extractTextFromContentParts } from '@agent-iris/core';
 import { AccountConnection, type WechatAccountConfig } from './account-connection.js';
 import {
   defaultDataDir,
@@ -152,24 +153,35 @@ export class WechatAdapter implements ChannelAdapter {
       return;
     }
 
-    if (message.content.text) await conn.sendText(raw.toUserId, message.content.text ?? '');
+    const text = extractTextFromContentParts(message.content);
+    if (text) await conn.sendText(raw.toUserId, text);
 
-    for (const att of message.content.attachments ?? []) {
-      if (!att.base64) {
-        logger.warn({ fileName: att.fileName }, 'wechat: attachment missing base64, skipping');
-        continue;
-      }
+    for (const part of message.content) {
       try {
-        const buf = Buffer.from(att.base64, 'base64');
-        await conn.sendFile(
-          raw.toUserId,
-          buf,
-          att.fileName ?? 'file',
-          att.mimeType ?? 'application/octet-stream',
-        );
-        logger.info({ fileName: att.fileName, bytes: buf.length }, 'wechat: sent attachment');
+        if (part.type === 'image_url' && part.image_url.url.startsWith('data:')) {
+          const comma = part.image_url.url.indexOf(',');
+          if (comma < 0) continue;
+          const base64 = part.image_url.url.slice(comma + 1);
+          const buf = Buffer.from(base64, 'base64');
+          await conn.sendFile(raw.toUserId, buf, part.image_url.detail ?? 'image', 'image/*');
+          continue;
+        }
+        if (part.type === 'input_audio') {
+          const buf = Buffer.from(part.input_audio.data, 'base64');
+          await conn.sendFile(raw.toUserId, buf, 'audio', part.input_audio.format ?? 'audio/*');
+          continue;
+        }
+        if (part.type === 'file' && part.file.file_data) {
+          const buf = Buffer.from(part.file.file_data, 'base64');
+          await conn.sendFile(
+            raw.toUserId,
+            buf,
+            part.file.filename ?? 'file',
+            part.file.mimetype ?? 'application/octet-stream',
+          );
+        }
       } catch (err) {
-        logger.error({ err, fileName: att.fileName }, 'wechat: failed to send attachment');
+        logger.error({ err }, 'wechat: failed to send content part');
       }
     }
   }

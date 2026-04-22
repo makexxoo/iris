@@ -25,16 +25,23 @@ All messages MUST use this envelope:
 - `traceId`: optional distributed tracing id
 - `payload`: business payload
 
+## 2.1 Single Message Body Rule
+
+- `payload` MUST be a complete `IrisMessage` object for both directions.
+- Legacy payload shapes (`messageId`, `requestId`, `conversationId` as protocol routing fields) are removed.
+- Routing identity uses `payload.id` as request/message key, plus `payload.sessionId` and channel fields.
+
 ## 3. iris -> backend (`type=message`)
 
 Required payload fields:
 
-- `messageId`
+- `id`
 - `sessionId`
 - `channel`
 - `channelUserId` (platform native user id)
-- `content`
-- `context`
+- `content` (OpenAI-compatible content parts array)
+- `timestamp`
+- `raw` (optional but recommended)
 
 Example:
 
@@ -44,30 +51,47 @@ Example:
   "type": "message",
   "timestamp": 1710000000000,
   "traceId": "msg-123",
+  "context": {},
   "payload": {
-    "messageId": "msg-123",
+    "id": "msg-123",
     "sessionId": "session-abc",
     "channel": "feishu",
     "channelUserId": "ou_xxx",
-    "content": { "type": "text", "text": "hello" },
-    "context": {}
+    "content": [
+      { "type": "text", "text": "hello" },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+          "detail": "input.png"
+        }
+      }
+    ],
+    "timestamp": 1710000000000,
+    "raw": {}
   }
 }
 ```
+
+Base64 image rule:
+
+- For inline image bytes, use `image_url.url = "data:<mime>;base64,<base64-data>"`.
+- Example: `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...`
 
 ## 4. backend -> iris (`type=message|message_update`)
 
 Required payload fields:
 
+- `id`
+- `sessionId`
 - `channel`
 - `channelUserId` (platform native user id)
-- `content`
+- `content` (OpenAI-compatible content parts array)
+- `timestamp`
 
 Optional payload fields:
 
-- `sessionId`
-- `requestId`
-- `conversationId`
+- `raw`
 
 Example:
 
@@ -77,11 +101,16 @@ Example:
   "type": "message",
   "timestamp": 1710000001234,
   "payload": {
+    "id": "msg-123",
     "channel": "feishu",
     "channelUserId": "ou_xxx",
     "sessionId": "session-abc",
-    "requestId": "msg-123",
-    "content": { "type": "text", "text": "hi" }
+    "content": [
+      { "type": "text", "text": "hi" },
+      { "type": "image_url", "image_url": { "url": "https://example.com/a.png" } }
+    ],
+    "timestamp": 1710000001234,
+    "raw": {}
   }
 }
 ```
@@ -95,6 +124,7 @@ iris rejects inbound backend messages when:
 - `type` not in `message|message_update`
 - `payload.channel` missing
 - `payload.channelUserId` missing
+- `payload.id` or `payload.sessionId` missing
 - `payload.content` missing or malformed
 
 Core error codes:

@@ -1,22 +1,11 @@
 import { BackendAdapter } from './types.js';
 import { SessionStateManager } from './session-state-manager.js';
-import { BackendRequest, MessageContent } from '../message.js';
+import { BackendRequest, IrisMessage } from '../message.js';
 import { ChannelAdapter } from '../channels/types.js';
 import type { IncomingMessage, Server } from 'http';
+import pino from 'pino';
 
-export interface BackendChatRequest extends BackendRequest {
-  channelAdapter: ChannelAdapter;
-}
-
-export interface InboundReplyMessage {
-  type: 'message' | 'message_update';
-  channel: string;
-  channelUserId: string;
-  sessionId?: string;
-  requestId?: string;
-  conversationId?: string;
-  content: MessageContent;
-}
+const logger = pino({ name: 'session-backend-ws' });
 
 export interface ReplyTimeoutContext {
   sessionId: string;
@@ -30,7 +19,6 @@ export interface UnknownReplyContext {
   requestId?: string;
   channel: string;
   channelUserId: string;
-  conversationId?: string;
 }
 
 export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdapter {
@@ -46,7 +34,7 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
 
   abstract attach(httpServer: Server<typeof IncomingMessage>): void;
 
-  async chat(req: BackendChatRequest): Promise<void> {
+  async chat(req: BackendRequest): Promise<void> {
     const { message, channelAdapter } = req;
     const requestId = message.id;
     const sessionId = this.sessionStates.resolveReusableSessionId({
@@ -60,7 +48,7 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     const connection = this.resolveConnection(sessionId);
     if (!connection) throw new Error(this.noConnectionErrorMessage());
 
-    const payload = this.buildOutboundPayload({ ...req, message: resolvedMessage });
+    const payload = JSON.stringify(req.message);
     this.sessionStates.upsert({
       backendName: this.name,
       sessionId,
@@ -69,7 +57,12 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
       channelAdapter,
       responseTimeoutMs: this.timeoutMs,
       onResponseTimeout: async () => {
-        await this.onReplyTimeout({ sessionId, requestId, message: resolvedMessage, channelAdapter });
+        await this.onReplyTimeout({
+          sessionId,
+          requestId,
+          message: resolvedMessage,
+          channelAdapter,
+        });
       },
     });
 
@@ -85,7 +78,8 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     const inbound = this.parseInboundMessage(raw);
     if (!inbound) return;
 
-    const { sessionId, requestId } = inbound;
+    const sessionId = inbound.sessionId;
+    const requestId = inbound.id;
     const state = this.sessionStates.resolveInboundState({
       backendName: this.name,
       sessionId,
@@ -108,7 +102,6 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
           requestId,
           channel: inbound.channel,
           channelUserId: inbound.channelUserId,
-          conversationId: inbound.conversationId,
         });
       }
       return;
@@ -119,15 +112,13 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     }
 
     await state.channelAdapter.reply({
-      ...state.message,
-      channel: inbound.channel,
-      channelUserId: inbound.channelUserId,
-      sessionId: inbound.sessionId ?? state.sessionId,
-      content: inbound.content,
-      timestamp: Date.now(),
+      ...inbound,
+      sessionId: inbound.sessionId || state.sessionId,
+      raw: inbound.raw ?? state.message.raw,
+      timestamp: inbound.timestamp || Date.now(),
     });
 
-    if (inbound.type === 'message' && state.sessionId) {
+    if (state.sessionId) {
       this.sessionStates.markFinal(this.name, state.sessionId, requestId);
     }
   }
@@ -153,6 +144,38 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     this.connections.clear();
   }
 
+  protected abstract isConnectionOpen(connection: TConnection): boolean;
+  protected abstract sendPayload(connection: TConnection, payload: string): Promise<void>;
+  protected abstract noConnectionErrorMessage(): string;
+  protected async onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void> {
+    const { sessionId, requestId, message, channelAdapter } = ctx;
+    logger.warn({ sessionId, requestId, backend: this.name }, `reply timeout`);
+    try {
+      await channelAdapter.reply({
+        ...message,
+        timestamp: Date.now(),
+        content: [{ type: 'text', text: `${this.name}: reply timeout for session ${sessionId}` }],
+      });
+    } catch (err) {
+      logger.warn(
+        { err, sessionId, requestId, backend: this.name },
+        'failed to send timeout reply',
+      );
+    }
+  }
+  protected onUnknownReply(ctx: UnknownReplyContext): void {
+    logger.warn(
+      {
+        sessionId: ctx.sessionId,
+        requestId: ctx.requestId,
+        channel: ctx.channel,
+        channelUserId: ctx.channelUserId,
+        backend: this.name,
+      },
+      'received reply for unknown request',
+    );
+  }
+
   private resolveConnection(sessionId: string): TConnection | null {
     const mapped = this.sessionToConnection.get(sessionId);
     if (mapped && this.isConnectionOpen(mapped)) return mapped;
@@ -165,11 +188,11 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     return null;
   }
 
-  protected abstract isConnectionOpen(connection: TConnection): boolean;
-  protected abstract sendPayload(connection: TConnection, payload: string): Promise<void>;
-  protected abstract buildOutboundPayload(req: BackendRequest): string;
-  protected abstract parseInboundMessage(raw: string): InboundReplyMessage | null;
-  protected abstract noConnectionErrorMessage(): string;
-  protected abstract onReplyTimeout(ctx: ReplyTimeoutContext): Promise<void>;
-  protected abstract onUnknownReply(ctx: UnknownReplyContext): void;
+  private parseInboundMessage(raw: string): IrisMessage | undefined {
+    try {
+      return JSON.parse(raw) as IrisMessage;
+    } catch (err) {
+      logger.warn({ error: err, backed: this.name }, 'invalid backend inbound envelope');
+    }
+  }
 }

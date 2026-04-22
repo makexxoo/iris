@@ -52,7 +52,12 @@ export function handleIrisMessage(params: {
   const { sessionId } = msg;
 
   sessionManager.enqueue(sessionId, async () => {
-    const text = msg.content.text ?? '';
+    const text = msg.content
+      .filter((part): part is Extract<IrisWsMessage['content'][number], { type: 'text' }> => {
+        return part.type === 'text';
+      })
+      .map((part) => part.text)
+      .join('');
     if (!text) {
       logger.warn({ sessionId }, 'empty message text, skipping');
       return;

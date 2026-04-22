@@ -3,34 +3,52 @@ export const BACKEND_PROTOCOL_VERSION = 2 as const;
 export type EnvelopeType = 'message' | 'message_update';
 
 export interface MessageContent {
-  type: string;
-  text?: string;
-  mediaUrl?: string;
-  attachments?: Array<{
-    type: string;
-    fileName?: string;
-    mimeType?: string;
-    url?: string;
-    base64?: string;
-  }>;
+  type: 'text';
+  text: string;
 }
 
 export interface InboundPayload {
-  messageId: string;
+  id: string;
   sessionId: string;
   channel: string;
   channelUserId: string;
-  content: MessageContent;
-  context?: Record<string, unknown>;
+  content: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'image_url';
+        image_url: {
+          url: string;
+          detail?: string;
+        };
+      }
+  >;
+  timestamp: number;
+  raw?: unknown;
 }
 
 export interface OutboundPayload {
+  id: string;
+  sessionId: string;
   channel: string;
   channelUserId: string;
-  content: MessageContent;
-  sessionId?: string;
-  requestId?: string;
-  conversationId?: string;
+  content: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'image_url';
+        image_url: {
+          url: string;
+          detail?: string;
+        };
+      }
+  >;
+  timestamp: number;
+  raw?: unknown;
 }
 
 export interface Envelope<TPayload> {

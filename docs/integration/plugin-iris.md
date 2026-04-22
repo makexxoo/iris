@@ -11,7 +11,7 @@
 
 - 入站（iris -> plugin）：`type=message`
 - 回传（plugin -> iris）：`type=message|message_update`
-- 必填：`channel`、`channelUserId`、`content`
+- payload 必须是完整 `IrisMessage`（`id/channel/channelUserId/sessionId/content/timestamp`）
 
 ## 2. 自接入自回复（Echo）
 
@@ -68,7 +68,7 @@ client.start();
 `handler` 入参包含：
 
 - `sessionId`
-- `requestId`
+- `requestId`（即入站 `IrisMessage.id`）
 - `channel`
 - `channelUserId`
 - `content`

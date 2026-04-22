@@ -1,7 +1,7 @@
 import { Client, Domain, EventDispatcher, WSClient } from '@larksuiteoapi/node-sdk';
 import { randomUUID } from 'crypto';
 import pino from 'pino';
-import type { IrisMessage, MessageAttachment } from '@agent-iris/core';
+import type { IrisMessage, MessageContentPart } from '@agent-iris/core';
 
 const logger = pino({ name: 'channel-feishu:appconnection' });
 
@@ -125,8 +125,8 @@ export class AppConnection {
         }
 
         // --- Parse content ---
-        const { text, attachments } = await this.parseContent(message);
-        if (!text && attachments.length === 0) return;
+        const content = await this.parseContent(message);
+        if (content.length === 0) return;
 
         const channelUserId = `${this.appId}:${openId}`;
         const mentions: Array<{ key: string; id?: { open_id?: string } }> = message.mentions ?? [];
@@ -136,11 +136,7 @@ export class AppConnection {
           channel: this.channelName,
           channelUserId,
           sessionId: `${this.channelName}:${channelUserId}`,
-          content: {
-            type: this.mapMessageType(message.message_type),
-            text: text || undefined,
-            attachments: attachments.length > 0 ? attachments : undefined,
-          },
+          content,
           timestamp: message.create_time ? parseInt(message.create_time, 10) : Date.now(),
           raw: {
             ...data,
@@ -170,48 +166,28 @@ export class AppConnection {
   // Content parsing
   // ---------------------------------------------------------------------------
 
-  private mapMessageType(msgType: string): IrisMessage['content']['type'] {
-    switch (msgType) {
-      case 'text':
-        return 'text';
-      case 'image':
-        return 'image';
-      case 'file':
-        return 'file';
-      case 'audio':
-        return 'audio';
-      case 'video':
-        return 'video';
-      case 'post':
-        return 'text'; // rich text normalized to text
-      default:
-        return 'unknown';
-    }
-  }
-
-  private async parseContent(
-    message: any,
-  ): Promise<{ text: string; attachments: MessageAttachment[] }> {
+  private async parseContent(message: any): Promise<MessageContentPart[]> {
     const msgType: string = message.message_type;
-    let text = '';
-    const attachments: MessageAttachment[] = [];
+    const content: MessageContentPart[] = [];
 
     try {
       const parsed = JSON.parse(message.content ?? '{}');
 
       switch (msgType) {
         case 'text': {
-          text = parsed.text ?? '';
+          let text = parsed.text ?? '';
           // Strip @mention placeholder keys from the text body
           for (const m of message.mentions ?? []) {
             if (m.key) text = text.replace(new RegExp(escapeRegExp(m.key) + '\\s*', 'g'), '');
           }
           text = text.trim();
+          if (text) content.push({ type: 'text', text });
           break;
         }
 
         case 'post': {
-          text = extractPostText(parsed);
+          const text = extractPostText(parsed);
+          if (text) content.push({ type: 'text', text });
           break;
         }
 
@@ -219,7 +195,7 @@ export class AppConnection {
           const imageKey: string | undefined = parsed.image_key;
           if (imageKey) {
             const att = await this.downloadResource(message.message_id, imageKey, 'image');
-            if (att) attachments.push(att);
+            if (att) content.push(att);
           }
           break;
         }
@@ -233,7 +209,7 @@ export class AppConnection {
               'file',
               parsed.file_name,
             );
-            if (att) attachments.push(att);
+            if (att) content.push(att);
           }
           break;
         }
@@ -242,7 +218,7 @@ export class AppConnection {
           const fileKey: string | undefined = parsed.file_key;
           if (fileKey) {
             const att = await this.downloadResource(message.message_id, fileKey, 'audio');
-            if (att) attachments.push(att);
+            if (att) content.push(att);
           }
           break;
         }
@@ -251,7 +227,7 @@ export class AppConnection {
           const fileKey: string | undefined = parsed.file_key;
           if (fileKey) {
             const att = await this.downloadResource(message.message_id, fileKey, 'video');
-            if (att) attachments.push(att);
+            if (att) content.push(att);
           }
           break;
         }
@@ -263,7 +239,7 @@ export class AppConnection {
       logger.warn({ err, msgType }, '解析消息内容失败');
     }
 
-    return { text, attachments };
+    return content;
   }
 
   private async downloadResource(
@@ -271,7 +247,7 @@ export class AppConnection {
     fileKey: string,
     type: 'image' | 'file' | 'audio' | 'video',
     fileName?: string,
-  ): Promise<MessageAttachment | null> {
+  ): Promise<MessageContentPart | null> {
     try {
       // Feishu SDK: image uses type='image', everything else uses type='file'
       const resourceType = type === 'image' ? 'image' : 'file';
@@ -286,11 +262,26 @@ export class AppConnection {
         return null;
       }
 
+      const base64 = buffer.toString('base64');
+      if (type === 'image') {
+        return {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/*;base64,${base64}`,
+            detail: fileName,
+          },
+        };
+      }
+      if (type === 'audio') {
+        return { type: 'input_audio', input_audio: { data: base64 } };
+      }
       return {
-        type,
-        fileKey,
-        fileName,
-        base64: buffer.toString('base64'),
+        type: 'file',
+        file: {
+          file_id: fileKey,
+          filename: fileName,
+          file_data: base64,
+        },
       };
     } catch (err) {
       logger.error({ err, messageId, fileKey, type }, '下载媒体资源失败');

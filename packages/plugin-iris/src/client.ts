@@ -22,6 +22,17 @@ function normalizeReply(reply: HandlerReply): MessageContent | null {
   return reply;
 }
 
+function extractTextFromParts(
+  parts: IrisInboundEnvelope['payload']['content'],
+): string {
+  return parts
+    .filter((part): part is { type: 'text'; text: string } => {
+      return !!part && typeof part === 'object' && part.type === 'text';
+    })
+    .map((part) => part.text ?? '')
+    .join('');
+}
+
 function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
   let decoded: unknown;
   try {
@@ -39,34 +50,29 @@ function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
       : null;
   if (!payload) return null;
   if (
-    typeof payload['messageId'] !== 'string' ||
+    typeof payload['id'] !== 'string' ||
     typeof payload['sessionId'] !== 'string' ||
     typeof payload['channel'] !== 'string' ||
     typeof payload['channelUserId'] !== 'string'
   ) {
     return null;
   }
-  const content =
-    payload['content'] && typeof payload['content'] === 'object'
-      ? (payload['content'] as MessageContent)
-      : null;
-  if (!content || typeof content.type !== 'string') return null;
-
+  const content = payload['content'];
+  if (!Array.isArray(content)) return null;
   return {
     version: BACKEND_PROTOCOL_VERSION,
     type: 'message',
     timestamp: typeof envelope['timestamp'] === 'number' ? (envelope['timestamp'] as number) : Date.now(),
     traceId: typeof envelope['traceId'] === 'string' ? (envelope['traceId'] as string) : undefined,
     payload: {
-      messageId: payload['messageId'],
+      id: payload['id'],
       sessionId: payload['sessionId'],
       channel: payload['channel'],
       channelUserId: payload['channelUserId'],
-      content,
-      context:
-        payload['context'] && typeof payload['context'] === 'object'
-          ? (payload['context'] as Record<string, unknown>)
-          : undefined,
+      content: content as IrisInboundEnvelope['payload']['content'],
+      timestamp:
+        typeof payload['timestamp'] === 'number' ? (payload['timestamp'] as number) : Date.now(),
+      raw: payload['raw'],
     },
   };
 }
@@ -122,11 +128,11 @@ export class IrisPluginClient {
 
     const inbound: IrisInboundMessage = {
       sessionId: envelope.payload.sessionId,
-      requestId: envelope.payload.messageId,
+      requestId: envelope.payload.id,
       channel: envelope.payload.channel,
       channelUserId: envelope.payload.channelUserId,
-      content: envelope.payload.content,
-      context: envelope.payload.context ?? {},
+      content: { type: 'text', text: extractTextFromParts(envelope.payload.content) },
+      context: {},
       traceId: envelope.traceId,
     };
 
@@ -147,11 +153,12 @@ export class IrisPluginClient {
       timestamp: Date.now(),
       traceId: inbound.traceId,
       payload: {
+        id: inbound.requestId,
         sessionId: inbound.sessionId,
-        requestId: inbound.requestId,
         channel: inbound.channel,
         channelUserId: inbound.channelUserId,
-        content: normalized,
+        content: [{ type: 'text', text: normalized.text ?? '' }],
+        timestamp: Date.now(),
       },
     });
   }

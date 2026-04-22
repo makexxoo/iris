@@ -1,5 +1,6 @@
 import pino from 'pino';
 import type { ChannelAdapter, IrisMessage, MessageHandler } from '@agent-iris/core';
+import { extractTextFromContentParts } from '@agent-iris/core';
 import { AppConnection, type FeishuAppConfig } from './app-connection.js';
 
 type RegisterServer = Parameters<ChannelAdapter['register']>[0];
@@ -42,7 +43,7 @@ export class FeishuAdapter implements ChannelAdapter {
       logger.error({ appId: raw.app_id }, 'feishu: no connection for appId');
       return;
     }
-    await conn.sendToChat(raw.message.chat_id, message.content.text ?? '');
+    await conn.sendToChat(raw.message.chat_id, extractTextFromContentParts(message.content));
   }
 
   /**

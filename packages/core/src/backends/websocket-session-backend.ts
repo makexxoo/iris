@@ -108,4 +108,14 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
   protected formatSendError(errorMessage: string): string {
     return `[${this.name}]: failed to send message: ${errorMessage}`;
   }
+
+  protected noConnectionErrorMessage(): string {
+    if (!this.isWsAttached()) {
+      return `${this.name}: WS server not attached — call attach() before sending messages`;
+    }
+    return `${this.name}: no connected plugin-${this.name} instance — is it running?`;
+  }
+  close(): void {
+    this.closeWs();
+  }
 }

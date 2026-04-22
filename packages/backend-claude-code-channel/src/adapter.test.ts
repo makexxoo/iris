@@ -5,6 +5,7 @@ import { ClaudeCodeChannelBackend } from './adapter';
 import {
   BACKEND_PROTOCOL_VERSION,
   SessionStateManager,
+  extractTextFromContentParts,
   type BackendRequest,
   type ChannelAdapter,
   type IrisMessage,
@@ -20,7 +21,7 @@ function makeRequest(
       channel: 'feishu',
       channelUserId: 'user-1',
       sessionId,
-      content: { type: 'text', text: 'hello' },
+      content: [{ type: 'text', text: 'hello' }],
       timestamp: Date.now(),
       raw: {},
     },
@@ -58,7 +59,7 @@ describe('ClaudeCodeChannelBackend', () => {
     let replyText = '';
     await backend.chat(
       makeRequest('session-1', (message) => {
-        replyText = message.content.text ?? '';
+        replyText = extractTextFromContentParts(message.content);
       }),
     );
 
@@ -70,10 +71,12 @@ describe('ClaudeCodeChannelBackend', () => {
         type: 'message',
         timestamp: Date.now(),
         payload: {
+          id: 'reply-1',
           sessionId: 'session-1',
           channel: 'feishu',
           channelUserId: 'user-1',
-          content: { type: 'text', text: 'hello back' },
+          content: [{ type: 'text', text: 'hello back' }],
+          raw: {},
         },
       }),
     );
@@ -91,7 +94,7 @@ describe('ClaudeCodeChannelBackend', () => {
     let replyText = '';
     await backend.chat(
       makeRequest('session-timeout', (message) => {
-        replyText = message.content.text ?? '';
+        replyText = extractTextFromContentParts(message.content);
       }),
     );
     await new Promise<void>((resolve) => setTimeout(resolve, 550));

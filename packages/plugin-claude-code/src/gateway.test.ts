@@ -19,7 +19,7 @@ function makeMsg(overrides: Partial<IrisWsMessage> = {}): IrisWsMessage {
     channel: 'feishu',
     channelUserId: 'user-1',
     sessionId: 'feishu:user-1',
-    content: { type: 'text', text: 'hello' },
+    content: [{ type: 'text', text: 'hello' }],
     timestamp: Date.now(),
     ...overrides,
   };
@@ -69,7 +69,7 @@ describe('handleIrisMessage', () => {
     const replies: string[] = [];
 
     handleIrisMessage({
-      msg: makeMsg({ content: { type: 'text', text: '' } }),
+      msg: makeMsg({ content: [{ type: 'text', text: '' }] }),
       sessionManager: mgr,
       cwd: '/tmp',
       sendReply: (_, text) => {

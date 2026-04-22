@@ -8,13 +8,31 @@ import type { ResolvedIrisAccount, IrisInboundPayload } from './types.js';
 interface IrisWsInbound {
   type: 'message';
   payload: {
-    messageId: string;
+    id: string;
     channel: string;
     channelUserId: string;
     sessionId: string;
-    content: { type: string; text?: string; mediaUrl?: string };
+    content: Array<
+      | {
+          type: 'text';
+          text: string;
+        }
+      | {
+          type: 'image_url';
+          image_url: { url: string; detail?: string };
+        }
+    >;
   };
   timestamp: number;
+}
+
+function readInboundTextFromContentParts(content: IrisWsInbound['payload']['content']): string {
+  return content
+    .filter((part): part is Extract<IrisWsInbound['payload']['content'][number], { type: 'text' }> => {
+      return part.type === 'text';
+    })
+    .map((part) => part.text)
+    .join('');
 }
 
 /**
@@ -58,7 +76,10 @@ async function dispatchIrisMessage(params: {
     return;
   }
 
-  const rawBody = payload.content.text ?? '';
+  const rawBody = payload.content
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map((part) => part.text)
+    .join('');
   const sessionId = payload.sessionId;
   const channelUserId = payload.channelUserId;
 
@@ -168,14 +189,15 @@ function connectWithReconnect(params: {
     if (m['type'] !== 'message') return;
 
     const inbound = m as unknown as IrisWsInbound;
-    if (!inbound.payload?.content?.text) return; // skip non-text for now
+    const inboundText = readInboundTextFromContentParts(inbound.payload.content);
+    if (!inboundText) return; // skip non-text for now
 
     const payload: IrisInboundPayload = {
-      id: inbound.payload.messageId,
+      id: inbound.payload.id,
       channel: inbound.payload.channel,
       channelUserId: inbound.payload.channelUserId,
       sessionId: inbound.payload.sessionId,
-      content: inbound.payload.content as IrisInboundPayload['content'],
+      content: { type: 'text', text: inboundText } as IrisInboundPayload['content'],
       timestamp: inbound.timestamp,
     };
 
@@ -193,7 +215,7 @@ function connectWithReconnect(params: {
                 sessionId,
                 channel: inbound.payload.channel,
                 channelUserId: inbound.payload.channelUserId,
-                content: { type: 'text', text },
+                content: [{ type: 'text', text }],
               },
             }),
           );

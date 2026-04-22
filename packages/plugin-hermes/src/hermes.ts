@@ -17,7 +17,16 @@ export interface IrisWsMessage {
   channel: string;
   channelUserId: string;
   sessionId: string;
-  content: { type: string; text?: string };
+  content: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'image_url';
+        image_url: { url: string; detail?: string };
+      }
+  >;
   timestamp: number;
   context?: Record<string, unknown>;
 }
@@ -32,6 +41,15 @@ function buildRequestHeaders(msg: IrisWsMessage, apiKey?: string): Record<string
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
   return headers;
+}
+
+function extractTextFromContent(content: IrisWsMessage['content']): string {
+  return content
+    .filter((part): part is Extract<IrisWsMessage['content'][number], { type: 'text' }> => {
+      return part.type === 'text';
+    })
+    .map((part) => part.text)
+    .join('');
 }
 
 function collectResponseText(data: any): string {
@@ -86,7 +104,7 @@ async function queryViaResponses(
       content: `[Context from iris pipeline]\n${JSON.stringify(msg.context, null, 2)}`,
     });
   }
-  inputItems.push({ role: 'user', content: msg.content.text ?? '' });
+  inputItems.push({ role: 'user', content: extractTextFromContent(msg.content) });
 
   const response = await fetch(`${base}/v1/responses`, {
     method: 'POST',

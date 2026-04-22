@@ -359,7 +359,7 @@ export class AccountConnection {
       // channelUserId format: "{accountId}:{fromUserId}" for routing in replyToUser
       channelUserId: `${this.accountId}:${senderId}`,
       sessionId: `wechat:${this.config.groupName}:${this.accountId}:${senderId}`,
-      content: { type: 'text', text },
+      content: [{ type: 'text', text }],
       timestamp: Date.now(),
       raw: {
         accountId: this.accountId,

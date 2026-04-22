@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { PluginContext } from '../message';
+import { PluginContext, extractTextFromContentParts } from '../message';
 import { Plugin } from './types';
 
 const logger = pino({ name: 'iris:plugin:logger' });
@@ -12,7 +12,7 @@ export class LoggerPlugin implements Plugin {
       {
         channel: ctx.message.channel,
         sessionId: ctx.message.sessionId,
-        contentType: ctx.message.content.type,
+        text: extractTextFromContentParts(ctx.message.content),
       },
       'pipeline',
     );

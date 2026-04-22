@@ -26,6 +26,16 @@ const protocolVersion = 2;
 
 logger.info({ irisWs, cwd }, 'claude-code-channel starting');
 
+function readInboundTextFromContentParts(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part): part is { type: 'text'; text: string } => {
+      return !!part && typeof part === 'object' && (part as { type?: string }).type === 'text';
+    })
+    .map((part) => part.text ?? '')
+    .join('');
+}
+
 function connect(): void {
   const ws = new WebSocket(irisWs as string);
 
@@ -53,15 +63,15 @@ function connect(): void {
     handleIrisMessage({
       msg: {
         type: 'message',
-        id: String(payload['messageId'] ?? ''),
+        id: String(payload['id'] ?? ''),
         channel: String(payload['channel'] ?? ''),
         channelUserId: String(payload['channelUserId'] ?? ''),
         sessionId: String(payload['sessionId'] ?? ''),
-        content: (payload['content'] as IrisWsMessage['content']) ?? { type: 'text', text: '' },
+        content: [{ type: 'text', text: readInboundTextFromContentParts(payload['content']) }],
         timestamp: typeof m['timestamp'] === 'number' ? (m['timestamp'] as number) : Date.now(),
         context:
-          payload['context'] && typeof payload['context'] === 'object'
-            ? (payload['context'] as Record<string, unknown>)
+          m['context'] && typeof m['context'] === 'object'
+            ? (m['context'] as Record<string, unknown>)
             : undefined,
       },
       sessionManager,
@@ -77,7 +87,7 @@ function connect(): void {
                 sessionId,
                 channel: String(payload['channel'] ?? ''),
                 channelUserId: String(payload['channelUserId'] ?? ''),
-                content: { type: 'text', text },
+                content: [{ type: 'text', text }],
               },
             }),
           );
