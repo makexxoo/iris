@@ -1,5 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage, Server } from 'http';
+import type { Duplex } from 'stream';
 import { SessionRoutedWsBackend } from './session-routed-ws-backend';
 import { SessionStateManager } from './session-state-manager';
 import pino from 'pino';
@@ -8,6 +9,10 @@ const logger = pino({ name: 'backend-ws' });
 
 export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<WebSocket> {
   private wss: WebSocketServer | null = null;
+  private httpServer: Server<typeof IncomingMessage> | null = null;
+  private upgradeHandler:
+    | ((request: IncomingMessage, socket: Duplex, head: Buffer) => void)
+    | null = null;
 
   protected path: string;
 
@@ -21,7 +26,8 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
   }
 
   protected attachWs(httpServer: Server<typeof IncomingMessage>, path: string): void {
-    this.wss = new WebSocketServer({ server: httpServer, path });
+    this.wss = new WebSocketServer({ noServer: true });
+    this.httpServer = httpServer;
 
     this.wss.on('connection', (ws) => {
       this.registerConnection(ws);
@@ -42,11 +48,27 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
       });
     });
 
+    this.upgradeHandler = (request, socket, head) => {
+      if (!this.wss) return;
+      const url = request.url ?? '';
+      const pathname = url.split('?')[0] ?? '';
+      if (pathname !== path) return;
+      this.wss.handleUpgrade(request, socket, head, (ws) => {
+        this.wss?.emit('connection', ws, request);
+      });
+    };
+    httpServer.on('upgrade', this.upgradeHandler);
+
     this.onWsAttached(path);
   }
 
   protected closeWs(): void {
     this.clearState();
+    if (this.httpServer && this.upgradeHandler) {
+      this.httpServer.off('upgrade', this.upgradeHandler);
+    }
+    this.upgradeHandler = null;
+    this.httpServer = null;
     this.wss?.close();
     this.wss = null;
   }
