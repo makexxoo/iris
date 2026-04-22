@@ -1,14 +1,8 @@
 import WebSocket from 'ws';
-import { extractTextFromContentParts, type IrisMessage } from '@agent-iris/protocol';
+import { IrisMessage } from '@agent-iris/protocol';
+import type { IncomingMessage } from 'http';
 import { logger } from './logger';
-import {
-  HandlerReply,
-  IrisInboundEnvelope,
-  IrisInboundMessage,
-  IrisMessageHandler,
-  IrisOutboundEnvelope,
-  MessageContent,
-} from './types';
+import { IrisMessageHandler } from './types';
 
 export interface IrisPluginClientOptions {
   irisWs: string;
@@ -16,50 +10,17 @@ export interface IrisPluginClientOptions {
   reconnectDelayMs?: number;
 }
 
-function normalizeReply(reply: HandlerReply): MessageContent | null {
-  if (reply === null || reply === undefined) return null;
-  if (typeof reply === 'string') return { type: 'text', text: reply };
-  return reply;
-}
-
-function extractTextFromParts(parts: IrisInboundEnvelope['content']): string {
-  return extractTextFromContentParts(parts);
-}
-
-function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
-  let decoded: unknown;
+function normalizeWsUrl(raw: string): string {
+  const input = raw.trim();
+  if (!input) return input;
   try {
-    decoded = JSON.parse(raw);
+    const url = new URL(input);
+    if (url.protocol === 'http:') url.protocol = 'ws:';
+    if (url.protocol === 'https:') url.protocol = 'wss:';
+    return url.toString();
   } catch {
-    return null;
+    return input;
   }
-  if (!decoded || typeof decoded !== 'object') return null;
-  const payload = decoded as Record<string, unknown>;
-  if (payload['type'] !== 'message' && payload['type'] !== 'message_update') return null;
-  if (
-    typeof payload['id'] !== 'string' ||
-    typeof payload['sessionId'] !== 'string' ||
-    typeof payload['channel'] !== 'string' ||
-    typeof payload['channelUserId'] !== 'string'
-  ) {
-    return null;
-  }
-  const content = payload['content'];
-  if (!Array.isArray(content)) return null;
-  return {
-    id: payload['id'],
-    type: payload['type'] === 'message_update' ? 'message_update' : 'message',
-    sessionId: payload['sessionId'],
-    channel: payload['channel'],
-    channelUserId: payload['channelUserId'],
-    content: content as IrisInboundEnvelope['content'],
-    timestamp: typeof payload['timestamp'] === 'number' ? (payload['timestamp'] as number) : Date.now(),
-    raw: payload['raw'] ?? { source: 'plugin-iris-inbound' },
-    context:
-      payload['context'] && typeof payload['context'] === 'object'
-        ? (payload['context'] as Record<string, unknown>)
-        : undefined,
-  };
 }
 
 export class IrisPluginClient {
@@ -84,11 +45,12 @@ export class IrisPluginClient {
 
   private connect(): void {
     if (this.stopped) return;
-    const ws = new WebSocket(this.options.irisWs);
+    const wsUrl = normalizeWsUrl(this.options.irisWs);
+    const ws = new WebSocket(wsUrl);
     this.ws = ws;
 
     ws.on('open', () => {
-      logger.info({ irisWs: this.options.irisWs }, 'connected to iris backend');
+      logger.info({ irisWs: wsUrl }, 'connected to iris backend');
     });
 
     ws.on('message', (raw) => {
@@ -102,50 +64,58 @@ export class IrisPluginClient {
       }
     });
 
+    ws.on('unexpected-response', (_req, res: IncomingMessage) => {
+      logger.warn(
+        {
+          statusCode: res.statusCode,
+          statusMessage: res.statusMessage,
+          headers: res.headers,
+          irisWs: wsUrl,
+        },
+        'plugin-iris websocket unexpected-response',
+      );
+    });
+
     ws.on('error', (err) => {
-      logger.warn({ err }, 'plugin-iris websocket error');
+      logger.warn({ err, irisWs: wsUrl }, 'plugin-iris websocket error');
     });
   }
 
   private async handleRawMessage(raw: string): Promise<void> {
-    const message = parseInboundEnvelope(raw);
-    if (!message) return;
-
-    const inbound: IrisInboundMessage = {
-      sessionId: message.sessionId,
-      requestId: message.id,
-      channel: message.channel,
-      channelUserId: message.channelUserId,
-      content: { type: 'text', text: extractTextFromParts(message.content) },
-      context: message.context ?? {},
-      raw: message.raw,
-      parts: message.content,
-    };
-
-    let reply: HandlerReply;
+    let message: IrisMessage | undefined;
     try {
-      reply = await this.options.handler(inbound);
+      message = JSON.parse(raw) as IrisMessage;
     } catch (err) {
-      logger.error({ err, sessionId: inbound.sessionId }, 'plugin handler failed');
-      reply = `plugin-iris handler error: ${String(err)}`;
+      logger.error({ err, message: raw }, 'parse message failed');
+      return;
     }
 
-    const normalized = normalizeReply(reply);
-    if (!normalized) return;
+    if (!message) return;
 
-    this.send({
-      id: inbound.requestId,
-      type: 'message',
-      sessionId: inbound.sessionId,
-      channel: inbound.channel,
-      channelUserId: inbound.channelUserId,
-      content: [{ type: 'text', text: normalized.text ?? '' }],
-      timestamp: Date.now(),
-      raw: { source: 'plugin-iris' },
-    });
+    try {
+      await this.options.handler(message);
+    } catch (err) {
+      logger.error({ err, sessionId: message.id }, 'plugin handler failed');
+      const reply = `plugin-iris handler error: ${String(err)}`;
+      this.send({
+        id: `${message.id}_reply`,
+        type: 'message',
+        channel: message.channel,
+        channelUserId: message.channelUserId,
+        content: [
+          {
+            type: 'text',
+            text: reply,
+          },
+        ],
+        raw: undefined,
+        sessionId: message.sessionId,
+        timestamp: Date.now(),
+      });
+    }
   }
 
-  send(envelope: IrisOutboundEnvelope): void {
+  send(envelope: IrisMessage): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       logger.warn('skip sending outbound message: websocket not open');
       return;
