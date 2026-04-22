@@ -86,12 +86,15 @@ export class MessageEngine {
     }
 
     try {
+      message.context = ctx.business;
       await backend.chat({
         message,
-        context: ctx.business,
         channelAdapter,
       });
-      logger.info({ channel: message.channel, backendName }, 'backend accepted message in async mode');
+      logger.info(
+        { channel: message.channel, backendName },
+        'backend accepted message in async mode',
+      );
     } catch (e) {
       logger.info({ channel: message.channel, backendName, error: e }, '智能体处理失败');
       message.content = [{ type: 'text', text: `智能体调用失败: ${e}` }];

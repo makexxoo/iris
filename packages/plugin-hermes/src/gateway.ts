@@ -1,21 +1,11 @@
 // packages/plugin-hermes/src/gateway.ts
+import type { MessageContentPart } from '@agent-iris/protocol';
 import type { SessionManager } from './session';
 import { type HermesConfig, type IrisWsMessage, queryHermes } from './hermes';
 import { type ExtractedFile, extractMedia } from './media';
 import { logger } from './logger';
 
-interface TextPart {
-  type: 'text';
-  text: string;
-}
-
-interface ImageUrlPart {
-  type: 'image_url';
-  image_url: { url: string; detail: string };
-}
-
-export type ContentPart = TextPart | ImageUrlPart;
-export type ReplyContent = ContentPart[];
+export type ReplyContent = MessageContentPart[];
 
 function buildContentArray(text: string, files: ExtractedFile[]): ReplyContent {
   const parts: ReplyContent = [];

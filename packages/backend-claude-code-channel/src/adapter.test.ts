@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import WebSocket from 'ws';
 import { ClaudeCodeChannelBackend } from './adapter';
 import {
-  BACKEND_PROTOCOL_VERSION,
   SessionStateManager,
   extractTextFromContentParts,
   type BackendRequest,
@@ -18,6 +17,7 @@ function makeRequest(
   return {
     message: {
       id: 'msg-1',
+      type: 'message',
       channel: 'feishu',
       channelUserId: 'user-1',
       sessionId,
@@ -67,17 +67,14 @@ describe('ClaudeCodeChannelBackend', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
     ws.send(
       JSON.stringify({
-        version: BACKEND_PROTOCOL_VERSION,
+        id: 'reply-1',
         type: 'message',
         timestamp: Date.now(),
-        payload: {
-          id: 'reply-1',
-          sessionId: 'session-1',
-          channel: 'feishu',
-          channelUserId: 'user-1',
-          content: [{ type: 'text', text: 'hello back' }],
-          raw: {},
-        },
+        sessionId: 'session-1',
+        channel: 'feishu',
+        channelUserId: 'user-1',
+        content: [{ type: 'text', text: 'hello back' }],
+        raw: {},
       }),
     );
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -105,7 +102,7 @@ describe('ClaudeCodeChannelBackend', () => {
 
   it('rejects chat() when no CLI connected', async () => {
     await expect(backend.chat(makeRequest('session-no-cli'))).rejects.toThrow(
-      'no connected claude-code-channel',
+      'no connected plugin-claude-code instance',
     );
   });
 });

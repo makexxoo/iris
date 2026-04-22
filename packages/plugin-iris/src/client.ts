@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
+import { extractTextFromContentParts, type IrisMessage } from '@agent-iris/protocol';
 import { logger } from './logger';
 import {
-  BACKEND_PROTOCOL_VERSION,
   HandlerReply,
   IrisInboundEnvelope,
   IrisInboundMessage,
@@ -22,15 +22,8 @@ function normalizeReply(reply: HandlerReply): MessageContent | null {
   return reply;
 }
 
-function extractTextFromParts(
-  parts: IrisInboundEnvelope['payload']['content'],
-): string {
-  return parts
-    .filter((part): part is { type: 'text'; text: string } => {
-      return !!part && typeof part === 'object' && part.type === 'text';
-    })
-    .map((part) => part.text ?? '')
-    .join('');
+function extractTextFromParts(parts: IrisInboundEnvelope['content']): string {
+  return extractTextFromContentParts(parts);
 }
 
 function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
@@ -41,14 +34,8 @@ function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
     return null;
   }
   if (!decoded || typeof decoded !== 'object') return null;
-  const envelope = decoded as Record<string, unknown>;
-  if (envelope['version'] !== BACKEND_PROTOCOL_VERSION) return null;
-  if (envelope['type'] !== 'message') return null;
-  const payload =
-    envelope['payload'] && typeof envelope['payload'] === 'object'
-      ? (envelope['payload'] as Record<string, unknown>)
-      : null;
-  if (!payload) return null;
+  const payload = decoded as Record<string, unknown>;
+  if (payload['type'] !== 'message' && payload['type'] !== 'message_update') return null;
   if (
     typeof payload['id'] !== 'string' ||
     typeof payload['sessionId'] !== 'string' ||
@@ -60,20 +47,18 @@ function parseInboundEnvelope(raw: string): IrisInboundEnvelope | null {
   const content = payload['content'];
   if (!Array.isArray(content)) return null;
   return {
-    version: BACKEND_PROTOCOL_VERSION,
-    type: 'message',
-    timestamp: typeof envelope['timestamp'] === 'number' ? (envelope['timestamp'] as number) : Date.now(),
-    traceId: typeof envelope['traceId'] === 'string' ? (envelope['traceId'] as string) : undefined,
-    payload: {
-      id: payload['id'],
-      sessionId: payload['sessionId'],
-      channel: payload['channel'],
-      channelUserId: payload['channelUserId'],
-      content: content as IrisInboundEnvelope['payload']['content'],
-      timestamp:
-        typeof payload['timestamp'] === 'number' ? (payload['timestamp'] as number) : Date.now(),
-      raw: payload['raw'],
-    },
+    id: payload['id'],
+    type: payload['type'] === 'message_update' ? 'message_update' : 'message',
+    sessionId: payload['sessionId'],
+    channel: payload['channel'],
+    channelUserId: payload['channelUserId'],
+    content: content as IrisInboundEnvelope['content'],
+    timestamp: typeof payload['timestamp'] === 'number' ? (payload['timestamp'] as number) : Date.now(),
+    raw: payload['raw'] ?? { source: 'plugin-iris-inbound' },
+    context:
+      payload['context'] && typeof payload['context'] === 'object'
+        ? (payload['context'] as Record<string, unknown>)
+        : undefined,
   };
 }
 
@@ -123,17 +108,18 @@ export class IrisPluginClient {
   }
 
   private async handleRawMessage(raw: string): Promise<void> {
-    const envelope = parseInboundEnvelope(raw);
-    if (!envelope) return;
+    const message = parseInboundEnvelope(raw);
+    if (!message) return;
 
     const inbound: IrisInboundMessage = {
-      sessionId: envelope.payload.sessionId,
-      requestId: envelope.payload.id,
-      channel: envelope.payload.channel,
-      channelUserId: envelope.payload.channelUserId,
-      content: { type: 'text', text: extractTextFromParts(envelope.payload.content) },
-      context: {},
-      traceId: envelope.traceId,
+      sessionId: message.sessionId,
+      requestId: message.id,
+      channel: message.channel,
+      channelUserId: message.channelUserId,
+      content: { type: 'text', text: extractTextFromParts(message.content) },
+      context: message.context ?? {},
+      raw: message.raw,
+      parts: message.content,
     };
 
     let reply: HandlerReply;
@@ -148,18 +134,14 @@ export class IrisPluginClient {
     if (!normalized) return;
 
     this.send({
-      version: BACKEND_PROTOCOL_VERSION,
+      id: inbound.requestId,
       type: 'message',
+      sessionId: inbound.sessionId,
+      channel: inbound.channel,
+      channelUserId: inbound.channelUserId,
+      content: [{ type: 'text', text: normalized.text ?? '' }],
       timestamp: Date.now(),
-      traceId: inbound.traceId,
-      payload: {
-        id: inbound.requestId,
-        sessionId: inbound.sessionId,
-        channel: inbound.channel,
-        channelUserId: inbound.channelUserId,
-        content: [{ type: 'text', text: normalized.text ?? '' }],
-        timestamp: Date.now(),
-      },
+      raw: { source: 'plugin-iris' },
     });
   }
 

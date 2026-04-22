@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { extractTextFromContentParts, type IrisMessage } from '@agent-iris/protocol';
 
 export interface HermesConfig {
   /** Base URL of hermes-agent api_server, e.g. "http://localhost:8642" */
@@ -11,25 +12,7 @@ export interface HermesConfig {
   timeoutMs?: number;
 }
 
-export interface IrisWsMessage {
-  type: 'message';
-  id: string;
-  channel: string;
-  channelUserId: string;
-  sessionId: string;
-  content: Array<
-    | {
-        type: 'text';
-        text: string;
-      }
-    | {
-        type: 'image_url';
-        image_url: { url: string; detail?: string };
-      }
-  >;
-  timestamp: number;
-  context?: Record<string, unknown>;
-}
+export type IrisWsMessage = IrisMessage;
 
 function buildRequestHeaders(msg: IrisWsMessage, apiKey?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -44,12 +27,7 @@ function buildRequestHeaders(msg: IrisWsMessage, apiKey?: string): Record<string
 }
 
 function extractTextFromContent(content: IrisWsMessage['content']): string {
-  return content
-    .filter((part): part is Extract<IrisWsMessage['content'][number], { type: 'text' }> => {
-      return part.type === 'text';
-    })
-    .map((part) => part.text)
-    .join('');
+  return extractTextFromContentParts(content);
 }
 
 function collectResponseText(data: any): string {

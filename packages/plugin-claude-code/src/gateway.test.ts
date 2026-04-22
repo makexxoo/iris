@@ -21,6 +21,7 @@ function makeMsg(overrides: Partial<IrisWsMessage> = {}): IrisWsMessage {
     sessionId: 'feishu:user-1',
     content: [{ type: 'text', text: 'hello' }],
     timestamp: Date.now(),
+    raw: { source: 'test' },
     ...overrides,
   };
 }

@@ -7,11 +7,11 @@
 
 ## 1. 协议前提
 
-`plugin-iris` 对接 `backend: iris`（WS），使用 V2 协议：
+`plugin-iris` 对接 `backend: iris`（WS），使用统一 `IrisMessage` 协议体：
 
 - 入站（iris -> plugin）：`type=message`
 - 回传（plugin -> iris）：`type=message|message_update`
-- payload 必须是完整 `IrisMessage`（`id/channel/channelUserId/sessionId/content/timestamp`）
+- WS 消息体本身必须是完整 `IrisMessage`（`id/type/channel/channelUserId/sessionId/content/timestamp/raw`）
 
 ## 2. 自接入自回复（Echo）
 

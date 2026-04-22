@@ -29,7 +29,7 @@ flowchart LR
   backend --> sessionMgr[SessionStateManager]
   sessionMgr --> routeIndex[RouteIndex]
   backend --> backendWs[BackendWebSocket]
-  backendWs --> inbound[InboundEnvelopeV2]
+  backendWs --> inbound[InboundIrisMessage]
   inbound --> backend
   backend --> channelReply[ChannelAdapter.reply]
 ```
@@ -47,7 +47,7 @@ For `chat()`:
 
 For `message|message_update` inbound:
 
-1. Validate V2 envelope and required payload fields.
+1. Validate inbound `IrisMessage` required fields.
 2. Resolve state with fallback order:
    - `sessionId`
    - `messageId`

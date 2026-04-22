@@ -17,8 +17,6 @@ export interface PluginContext {
 /** Request sent to an AI backend */
 export interface BackendRequest {
   message: IrisMessage;
-  /** Aggregated business context injected by plugins */
-  context: Record<string, unknown>;
 
   /**
    * Current channel adapter. Async backends can call channelAdapter.reply()

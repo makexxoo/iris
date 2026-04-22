@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import WebSocket from 'ws';
 import { parseArgs } from 'node:util';
+import { type IrisMessage, type MessageContentPart } from '@agent-iris/protocol';
 import { SessionManager } from './session';
 import { handleIrisMessage, type IrisWsMessage } from './gateway';
 import { logger } from './logger';
@@ -22,18 +23,13 @@ if (!irisWs) {
 
 const cwd = (values['cwd'] as string | undefined) ?? process.cwd();
 const sessionManager = new SessionManager();
-const protocolVersion = 2;
-
 logger.info({ irisWs, cwd }, 'claude-code-channel starting');
 
-function readInboundTextFromContentParts(content: unknown): string {
-  if (!Array.isArray(content)) return '';
-  return content
-    .filter((part): part is { type: 'text'; text: string } => {
-      return !!part && typeof part === 'object' && (part as { type?: string }).type === 'text';
-    })
-    .map((part) => part.text ?? '')
-    .join('');
+function normalizeContentParts(content: unknown): MessageContentPart[] {
+  if (!Array.isArray(content)) return [];
+  return content.filter((part): part is MessageContentPart => {
+    return !!part && typeof part === 'object' && 'type' in part;
+  });
 }
 
 function connect(): void {
@@ -52,43 +48,39 @@ function connect(): void {
     }
     if (!msg || typeof msg !== 'object') return;
 
-    const m = msg as Record<string, unknown>;
-    if (m['type'] !== 'message') return;
-    const payload =
-      m['payload'] && typeof m['payload'] === 'object'
-        ? (m['payload'] as Record<string, unknown>)
-        : null;
-    if (!payload) return;
+    const payload = msg as Partial<IrisMessage>;
+    if (payload.type !== 'message') return;
 
     handleIrisMessage({
       msg: {
         type: 'message',
-        id: String(payload['id'] ?? ''),
-        channel: String(payload['channel'] ?? ''),
-        channelUserId: String(payload['channelUserId'] ?? ''),
-        sessionId: String(payload['sessionId'] ?? ''),
-        content: [{ type: 'text', text: readInboundTextFromContentParts(payload['content']) }],
-        timestamp: typeof m['timestamp'] === 'number' ? (m['timestamp'] as number) : Date.now(),
+        id: String(payload.id ?? ''),
+        channel: String(payload.channel ?? ''),
+        channelUserId: String(payload.channelUserId ?? ''),
+        sessionId: String(payload.sessionId ?? ''),
+        content: normalizeContentParts(payload.content),
+        timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : Date.now(),
+        raw: payload.raw ?? { source: 'plugin-claude-code-inbound' },
         context:
-          m['context'] && typeof m['context'] === 'object'
-            ? (m['context'] as Record<string, unknown>)
+          payload.context && typeof payload.context === 'object'
+            ? (payload.context as Record<string, unknown>)
             : undefined,
       },
       sessionManager,
       cwd,
       sendReply: (sessionId, text) => {
         if (ws.readyState === WebSocket.OPEN) {
+          const now = Date.now();
           ws.send(
-            JSON.stringify({
-              version: protocolVersion,
+            JSON.stringify(<IrisMessage>{
+              id: `reply-${now}`,
               type: 'message',
-              timestamp: Date.now(),
-              payload: {
-                sessionId,
-                channel: String(payload['channel'] ?? ''),
-                channelUserId: String(payload['channelUserId'] ?? ''),
-                content: [{ type: 'text', text }],
-              },
+              sessionId,
+              channel: String(payload.channel ?? ''),
+              channelUserId: String(payload.channelUserId ?? ''),
+              content: [{ type: 'text', text }],
+              timestamp: now,
+              raw: { source: 'plugin-claude-code' },
             }),
           );
         }

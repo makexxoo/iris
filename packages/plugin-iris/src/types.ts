@@ -1,66 +1,15 @@
-export const BACKEND_PROTOCOL_VERSION = 2 as const;
-
-export type EnvelopeType = 'message' | 'message_update';
+import type { IrisMessage, MessageContentPart } from '@agent-iris/protocol';
+export type MessageType = IrisMessage['type'];
 
 export interface MessageContent {
   type: 'text';
   text: string;
 }
 
-export interface InboundPayload {
-  id: string;
-  sessionId: string;
-  channel: string;
-  channelUserId: string;
-  content: Array<
-    | {
-        type: 'text';
-        text: string;
-      }
-    | {
-        type: 'image_url';
-        image_url: {
-          url: string;
-          detail?: string;
-        };
-      }
-  >;
-  timestamp: number;
-  raw?: unknown;
-}
-
-export interface OutboundPayload {
-  id: string;
-  sessionId: string;
-  channel: string;
-  channelUserId: string;
-  content: Array<
-    | {
-        type: 'text';
-        text: string;
-      }
-    | {
-        type: 'image_url';
-        image_url: {
-          url: string;
-          detail?: string;
-        };
-      }
-  >;
-  timestamp: number;
-  raw?: unknown;
-}
-
-export interface Envelope<TPayload> {
-  version: typeof BACKEND_PROTOCOL_VERSION;
-  type: EnvelopeType;
-  timestamp: number;
-  traceId?: string;
-  payload: TPayload;
-}
-
-export type IrisInboundEnvelope = Envelope<InboundPayload>;
-export type IrisOutboundEnvelope = Envelope<OutboundPayload>;
+export type InboundPayload = IrisMessage;
+export type OutboundPayload = IrisMessage;
+export type IrisInboundEnvelope = IrisMessage;
+export type IrisOutboundEnvelope = IrisMessage;
 
 export interface IrisInboundMessage {
   sessionId: string;
@@ -70,6 +19,8 @@ export interface IrisInboundMessage {
   content: MessageContent;
   context: Record<string, unknown>;
   traceId?: string;
+  raw?: unknown;
+  parts?: MessageContentPart[];
 }
 
 export type HandlerReply = string | MessageContent | null | undefined;

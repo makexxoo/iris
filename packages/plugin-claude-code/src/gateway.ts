@@ -1,6 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { existsSync } from 'node:fs';
+import { extractTextFromContentParts, type IrisMessage } from '@agent-iris/protocol';
 import type { SessionManager } from './session';
 import { logger } from './logger';
 
@@ -45,25 +46,7 @@ function resolveClaudePath(): string {
 const CLAUDE_BIN = resolveClaudePath();
 logger.info({ claudeBin: CLAUDE_BIN }, 'resolved claude binary');
 
-export interface IrisWsMessage {
-  type: 'message';
-  id: string;
-  channel: string;
-  channelUserId: string;
-  sessionId: string;
-  content: Array<
-    | {
-        type: 'text';
-        text: string;
-      }
-    | {
-        type: 'image_url';
-        image_url: { url: string; detail?: string };
-      }
-  >;
-  timestamp: number;
-  context?: Record<string, unknown>;
-}
+export type IrisWsMessage = IrisMessage;
 
 interface StreamJsonMessage {
   type: string;
@@ -188,12 +171,7 @@ export function handleIrisMessage(params: {
   const { sessionId } = msg;
 
   sessionManager.enqueue(sessionId, async () => {
-    const prompt = msg.content
-      .filter((part): part is Extract<IrisWsMessage['content'][number], { type: 'text' }> => {
-        return part.type === 'text';
-      })
-      .map((part) => part.text)
-      .join('');
+    const prompt = extractTextFromContentParts(msg.content);
     if (!prompt) {
       logger.warn({ sessionId }, 'empty message text, skipping');
       return;
