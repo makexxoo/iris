@@ -1,5 +1,5 @@
 export { WechatAdapter, type WechatConfig, type WechatChannelGroup } from './adapter.js';
-export { AccountConnection, type WechatAccountConfig } from './account-connection.js';
+export { AccountConnection, type PolicyMode, type WechatAccountConfig } from './account-connection.js';
 export {
   fetchQrCode,
   pollQrStatusOnce,

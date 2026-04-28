@@ -1,7 +1,7 @@
 import pino from 'pino';
 import type { ChannelAdapter, IrisMessage, MessageHandler } from '@agent-iris/core';
 import { extractTextFromContentParts } from '@agent-iris/core';
-import { AccountConnection, type WechatAccountConfig } from './account-connection.js';
+import { AccountConnection, type PolicyMode, type WechatAccountConfig } from './account-connection.js';
 import {
   defaultDataDir,
   fetchQrCode,
@@ -27,6 +27,14 @@ export interface WechatConfig {
    * Defaults to ~/.iris/wechat/accounts/
    */
   dataDir?: string;
+  /** DM policy: 'open' (default), 'disabled', or 'allowlist' */
+  dmPolicy?: PolicyMode;
+  /** Group policy: 'disabled' (default), 'open', or 'allowlist' */
+  groupPolicy?: PolicyMode;
+  /** Allowed user IDs when dmPolicy is 'allowlist' */
+  allowFrom?: string[];
+  /** Allowed group/room IDs when groupPolicy is 'allowlist' */
+  groupAllowFrom?: string[];
 }
 
 /**
@@ -70,6 +78,10 @@ export class WechatAdapter implements ChannelAdapter {
   private groupNames: Set<string> = new Set();
   private readonly messageHandler: MessageHandler;
   readonly dataDir: string;
+  private readonly dmPolicy: PolicyMode;
+  private readonly groupPolicy: PolicyMode;
+  private readonly allowFrom: string[];
+  private readonly groupAllowFrom: string[];
 
   /** Active QR sessions keyed by a short session ID */
   private qrSessions = new Map<string, QrSession>();
@@ -81,6 +93,10 @@ export class WechatAdapter implements ChannelAdapter {
   constructor(config: WechatConfig, messageHandler: MessageHandler) {
     this.messageHandler = messageHandler;
     this.dataDir = config.dataDir ?? defaultDataDir();
+    this.dmPolicy = config.dmPolicy ?? 'open';
+    this.groupPolicy = config.groupPolicy ?? 'disabled';
+    this.allowFrom = config.allowFrom ?? [];
+    this.groupAllowFrom = config.groupAllowFrom ?? [];
   }
 
   support(message: IrisMessage): boolean {
@@ -201,7 +217,14 @@ export class WechatAdapter implements ChannelAdapter {
     if (existing) {
       existing.stop();
     }
-    const conn = this._createConnection(cfg);
+    const conn = this._createConnection({
+      ...cfg,
+      dmPolicy: cfg.dmPolicy ?? this.dmPolicy,
+      groupPolicy: cfg.groupPolicy ?? this.groupPolicy,
+      allowFrom: cfg.allowFrom ?? this.allowFrom,
+      groupAllowFrom: cfg.groupAllowFrom ?? this.groupAllowFrom,
+      dataDir: cfg.dataDir ?? this.dataDir,
+    });
     conn.start();
     logger.info({ accountId: cfg.accountId }, 'wechat: account added dynamically');
   }

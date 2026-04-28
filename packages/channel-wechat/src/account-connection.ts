@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { promises as fs, readFileSync } from 'node:fs';
+import path from 'node:path';
 import axios, { AxiosError } from 'axios';
 import pino from 'pino';
 import type { IrisMessage, MessageHandler } from '@agent-iris/core';
@@ -38,10 +40,22 @@ const MSG_STATE_FINISH = 2;
 // Config
 // ---------------------------------------------------------------------------
 
+export type PolicyMode = 'open' | 'disabled' | 'allowlist';
+
 export interface WechatAccountConfig {
   accountId: string;
   token: string;
   groupName: string;
+  /** DM policy: 'open' (default), 'disabled', or 'allowlist' */
+  dmPolicy?: PolicyMode;
+  /** Group policy: 'disabled' (default), 'open', or 'allowlist' */
+  groupPolicy?: PolicyMode;
+  /** Allowed user IDs when dmPolicy is 'allowlist' */
+  allowFrom?: string[];
+  /** Allowed group/room IDs when groupPolicy is 'allowlist' */
+  groupAllowFrom?: string[];
+  /** Directory for persisting syncBuf and other state */
+  dataDir?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +111,16 @@ export class AccountConnection {
   private readonly token: string;
   private readonly baseUrl: string;
   private readonly onMessage: MessageHandler;
+  private readonly dataDir: string | undefined;
+
+  /** DM policy */
+  private readonly dmPolicy: PolicyMode;
+  /** Group policy */
+  private readonly groupPolicy: PolicyMode;
+  /** Allowed user IDs for DM allowlist */
+  private readonly allowFrom: Set<string>;
+  /** Allowed room/group IDs for group allowlist */
+  private readonly groupAllowFrom: Set<string>;
 
   /** context_token cache keyed by fromUserId */
   private contextTokens = new Map<string, string>();
@@ -118,11 +142,18 @@ export class AccountConnection {
     this.token = config.token;
     this.baseUrl = ILINK_BASE_URL;
     this.onMessage = onMessage;
+    this.dataDir = config.dataDir;
+
+    this.dmPolicy = config.dmPolicy ?? 'open';
+    this.groupPolicy = config.groupPolicy ?? 'disabled';
+    this.allowFrom = new Set(config.allowFrom ?? []);
+    this.groupAllowFrom = new Set(config.groupAllowFrom ?? []);
   }
 
   start(): void {
     if (this.running) return;
     this.running = true;
+    this._loadSyncBuf();
     this._pollLoop().catch((err) => {
       logger.error({ accountId: safeId(this.accountId), err }, 'poll loop exited unexpectedly');
     });
@@ -265,6 +296,7 @@ export class AccountConnection {
         const newBuf = String(response['get_updates_buf'] ?? '');
         if (newBuf) {
           this.syncBuf = newBuf;
+          this._saveSyncBuf();
         }
 
         this._cleanDedup();
@@ -340,8 +372,26 @@ export class AccountConnection {
     if (senderId === this.accountId) return;
 
     const messageId = String(message['message_id'] ?? '').trim();
-    if (messageId && this._isDuplicate(messageId)) return;
-    if (messageId) this._markSeen(messageId);
+    if (messageId && this._checkAndMark(messageId)) return;
+
+    const chatType = this._guessChatType(message);
+
+    // DM policy filtering
+    if (chatType === 'dm') {
+      if (this.dmPolicy === 'disabled') return;
+      if (this.dmPolicy === 'allowlist' && !this.allowFrom.has(senderId)) return;
+    }
+
+    // Group policy filtering
+    if (chatType === 'group') {
+      if (this.groupPolicy === 'disabled') return;
+      if (this.groupPolicy === 'allowlist') {
+        const roomId = String(message['room_id'] ?? message['chat_room_id'] ?? '').trim();
+        const toUserId = String(message['to_user_id'] ?? '').trim();
+        const effectiveChatId = roomId || toUserId || senderId;
+        if (!this.groupAllowFrom.has(effectiveChatId)) return;
+      }
+    }
 
     const contextToken = String(message['context_token'] ?? '').trim();
     if (contextToken) {
@@ -383,14 +433,17 @@ export class AccountConnection {
   // Dedup helpers
   // -------------------------------------------------------------------------
 
-  private _isDuplicate(messageId: string): boolean {
+  /**
+   * Atomically check whether a messageId has already been seen within
+   * MESSAGE_DEDUP_TTL_MS.  If it has not, mark it as seen and return false.
+   */
+  private _checkAndMark(messageId: string): boolean {
     const ts = this.seenMessages.get(messageId);
-    if (ts === undefined) return false;
-    return Date.now() - ts < MESSAGE_DEDUP_TTL_MS;
-  }
-
-  private _markSeen(messageId: string): void {
+    if (ts !== undefined && Date.now() - ts < MESSAGE_DEDUP_TTL_MS) {
+      return true; // duplicate
+    }
     this.seenMessages.set(messageId, Date.now());
+    return false;
   }
 
   private _cleanDedup(): void {
@@ -398,5 +451,50 @@ export class AccountConnection {
     for (const [id, ts] of this.seenMessages) {
       if (ts < cutoff) this.seenMessages.delete(id);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // syncBuf persistence
+  // -------------------------------------------------------------------------
+
+  private _syncBufPath(): string {
+    if (!this.dataDir) return '';
+    return path.join(this.dataDir, `${this.accountId}.sync.json`);
+  }
+
+  private _loadSyncBuf(): void {
+    const p = this._syncBufPath();
+    if (!p) return;
+    try {
+      const raw = readFileSync(p, 'utf8');
+      this.syncBuf = String(JSON.parse(raw)['get_updates_buf'] ?? '');
+    } catch {
+      // File doesn't exist or is corrupt — start fresh
+    }
+  }
+
+  private _saveSyncBuf(): void {
+    const p = this._syncBufPath();
+    if (!p) return;
+    const tmp = `${p}.tmp`;
+    fs.writeFile(tmp, JSON.stringify({ get_updates_buf: this.syncBuf }), 'utf8')
+      .then(() => fs.rename(tmp, p))
+      .catch((err) => {
+        logger.warn({ accountId: safeId(this.accountId), err }, 'failed to persist syncBuf');
+      });
+  }
+
+  // -------------------------------------------------------------------------
+  // Chat type detection (mirrors hermes-agent _guess_chat_type)
+  // -------------------------------------------------------------------------
+
+  private _guessChatType(message: Record<string, unknown>): 'dm' | 'group' {
+    const roomId = String(message['room_id'] ?? message['chat_room_id'] ?? '').trim();
+    const toUserId = String(message['to_user_id'] ?? '').trim();
+    const msgType = message['msg_type'];
+    const isGroup =
+      !!roomId ||
+      (!!toUserId && toUserId !== this.accountId && msgType === 1);
+    return isGroup ? 'group' : 'dm';
   }
 }
