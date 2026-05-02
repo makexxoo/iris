@@ -133,6 +133,7 @@ export class AppConnection {
 
         this.onMessage({
           id: data.event_id ?? randomUUID(),
+          type: 'message',
           channel: this.channelName,
           channelUserId,
           sessionId: `${this.channelName}:${channelUserId}`,
