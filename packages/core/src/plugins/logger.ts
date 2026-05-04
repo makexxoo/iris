@@ -10,7 +10,8 @@ export class LoggerPlugin implements Plugin {
   async execute(ctx: PluginContext): Promise<void> {
     logger.info(
       {
-        channel: ctx.message.channel,
+        channelType: ctx.message.channelType,
+        channelName: ctx.message.channelName,
         sessionId: ctx.message.sessionId,
         text: extractTextFromContentParts(ctx.message.content),
       },
