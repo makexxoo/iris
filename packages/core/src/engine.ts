@@ -43,10 +43,17 @@ export class MessageEngine {
   async _handle(message: IrisMessage): Promise<void> {
     // Normalize fields not yet set by the adapter (mirrors buildMessage defaults)
     if (!message.id) message.id = randomUUID();
-    if (!message.sessionId) message.sessionId = `${message.channel}:${message.channelUserId}`;
+    if (!message.sessionId) message.sessionId = `${message.channelName}:${message.channelUserId}`;
     if (!message.timestamp) message.timestamp = Date.now();
 
-    logger.info({ channel: message.channel, sessionId: message.sessionId }, 'incoming message');
+    logger.info(
+      {
+        channelType: message.channelType,
+        channelName: message.channelName,
+        sessionId: message.sessionId,
+      },
+      'incoming message',
+    );
 
     const ctx: PluginContext = {
       message,
@@ -57,14 +64,17 @@ export class MessageEngine {
     const channelAdapter = channelAdapterRegistry.resolveByMessage(message);
 
     if (!channelAdapter) {
-      logger.error({ channel: message.channel }, 'channel adapter not found for reply');
+      logger.error(
+        { channelType: message.channelType, channelName: message.channelName },
+        'channel adapter not found for reply',
+      );
       return;
     }
 
     // Route by channel instance name (adapter.name), fall back to default backend.
     // message.channel carries the adapter name set during registration.
     const backendName =
-      this.config.backends.routes[message.channel] ?? this.config.backends.default;
+      this.config.backends.routes[message.channelName] ?? this.config.backends.default;
     const backend = this.backendAdapters.get(backendName);
     if (!backend) {
       logger.error({ backendName }, 'backend not found');
@@ -85,11 +95,19 @@ export class MessageEngine {
         channelAdapter,
       });
       logger.info(
-        { channel: message.channel, backendName },
+        { channelType: message.channelType, channelName: message.channelName, backendName },
         'backend accepted message in async mode',
       );
     } catch (e) {
-      logger.info({ channel: message.channel, backendName, error: e }, '智能体处理失败');
+      logger.info(
+        {
+          channelType: message.channelType,
+          channelName: message.channelName,
+          backendName,
+          error: e,
+        },
+        '智能体处理失败',
+      );
       message.content = [{ type: 'text', text: `智能体调用失败: ${e}` }];
       await channelAdapter.reply(message);
     }

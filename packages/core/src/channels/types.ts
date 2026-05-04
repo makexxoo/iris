@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { IrisMessage } from '../message';
 
 export interface ChannelAdapter {
+  type: string;
   name: string;
 
   support(message: IrisMessage): boolean;

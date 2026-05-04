@@ -17,7 +17,8 @@ export interface ReplyTimeoutContext {
 export interface UnknownReplyContext {
   sessionId?: string;
   requestId?: string;
-  channel: string;
+  channelType: string;
+  channelName: string;
   channelUserId: string;
 }
 
@@ -69,7 +70,9 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
         channelAdapter,
       });
       this.pendingByRequestId.delete(requestId);
-      this.pendingByRoute.delete(this.routeKey(message.channel, message.channelUserId));
+      this.pendingByRoute.delete(
+        this.routeKey(message.channelType, message.channelName, message.channelUserId),
+      );
     }, this.timeoutMs);
     const pending = {
       sessionId,
@@ -79,7 +82,10 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
       requestId,
     };
     this.pendingByRequestId.set(requestId, pending);
-    this.pendingByRoute.set(this.routeKey(message.channel, message.channelUserId), pending);
+    this.pendingByRoute.set(
+      this.routeKey(message.channelType, message.channelName, message.channelUserId),
+      pending,
+    );
 
     try {
       await this.sendPayload(connection, payload);
@@ -101,7 +107,9 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     const requestId = inbound.id;
     const pending =
       (requestId ? this.pendingByRequestId.get(requestId) : undefined) ??
-      this.pendingByRoute.get(this.routeKey(inbound.channel, inbound.channelUserId));
+      this.pendingByRoute.get(
+        this.routeKey(inbound.channelType, inbound.channelName, inbound.channelUserId),
+      );
     if (!pending) {
       const proactiveAdapter = channelAdapterRegistry.resolveByMessage(inbound);
       if (proactiveAdapter) {
@@ -112,7 +120,7 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
         });
         return;
       }
-      const unknownKey = `${this.name}::${requestId ?? ''}::${sessionId}::${inbound.channel}::${inbound.channelUserId}`;
+      const unknownKey = `${this.name}::${requestId ?? ''}::${sessionId}::${inbound.channelType}::${inbound.channelName}::${inbound.channelUserId}`;
       const now = Date.now();
       const lastWarnAt = this.unknownWarnAt.get(unknownKey) ?? 0;
       if (now - lastWarnAt > 60_000) {
@@ -120,7 +128,8 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
         this.onUnknownReply({
           sessionId,
           requestId,
-          channel: inbound.channel,
+          channelType: inbound.channelType,
+          channelName: inbound.channelName,
           channelUserId: inbound.channelUserId,
         });
       }
@@ -128,7 +137,9 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     }
     clearTimeout(pending.timeout);
     this.pendingByRequestId.delete(pending.requestId);
-    this.pendingByRoute.delete(this.routeKey(inbound.channel, inbound.channelUserId));
+    this.pendingByRoute.delete(
+      this.routeKey(inbound.channelType, inbound.channelName, inbound.channelUserId),
+    );
 
     if (this.isConnectionOpen(connection)) {
       this.sessionToConnection.set(pending.sessionId, connection);
@@ -192,7 +203,8 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
       {
         sessionId: ctx.sessionId,
         requestId: ctx.requestId,
-        channel: ctx.channel,
+        channelType: ctx.channelType,
+        channelName: ctx.channelName,
         channelUserId: ctx.channelUserId,
         backend: this.name,
       },
@@ -212,8 +224,8 @@ export abstract class SessionRoutedWsBackend<TConnection> implements BackendAdap
     return null;
   }
 
-  private routeKey(channel: string, channelUserId: string): string {
-    return `${channel}::${channelUserId}`;
+  private routeKey(channelType: string, channelName: string, channelUserId: string): string {
+    return `${channelType}::${channelName}::${channelUserId}`;
   }
 
   private parseInboundMessage(raw: string): IrisMessage | undefined {

@@ -32,7 +32,8 @@ export type MessageContentPart =
 export interface IrisMessage {
   id: string;
   type: MessageType;
-  channel: string;
+  channelType: string;
+  channelName: string;
   channelUserId: string;
   sessionId: string;
   content: MessageContentPart[];

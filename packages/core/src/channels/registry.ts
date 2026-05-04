@@ -3,10 +3,10 @@ import { IrisMessage } from '../message';
 import { FastifyInstance } from 'fastify';
 
 class ChannelAdapterRegistry {
-  private readonly adapters = new Map<string, ChannelAdapter>();
+  private readonly adapters = new Set<ChannelAdapter>();
 
   register(adapter: ChannelAdapter): void {
-    this.adapters.set(adapter.name, adapter);
+    this.adapters.add(adapter);
   }
 
   list(): ChannelAdapter[] {
@@ -14,8 +14,6 @@ class ChannelAdapterRegistry {
   }
 
   resolveByMessage(message: IrisMessage): ChannelAdapter | undefined {
-    const byName = this.adapters.get(message.channel);
-    if (byName) return byName;
     return this.list().find((adapter) => adapter.support(message));
   }
 

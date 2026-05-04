@@ -1,7 +1,11 @@
 import pino from 'pino';
 import type { ChannelAdapter, IrisMessage, MessageHandler } from '@agent-iris/core';
 import { extractTextFromContentParts } from '@agent-iris/core';
-import { AccountConnection, type PolicyMode, type WechatAccountConfig } from './account-connection.js';
+import {
+  AccountConnection,
+  type PolicyMode,
+  type WechatAccountConfig,
+} from './account-connection.js';
 import {
   defaultDataDir,
   fetchQrCode,
@@ -71,6 +75,7 @@ interface QrSession {
 // ---------------------------------------------------------------------------
 
 export class WechatAdapter implements ChannelAdapter {
+  readonly type = 'wechat';
   readonly name = 'wechat';
   private static readonly defaultGroupName = 'wechat-default';
 
@@ -100,7 +105,8 @@ export class WechatAdapter implements ChannelAdapter {
   }
 
   support(message: IrisMessage): boolean {
-    return this.groupNames.has(message.channel);
+    if (message.channelType !== this.type) return false;
+    return this.groupNames.has(message.channelName);
   }
 
   // -------------------------------------------------------------------------
@@ -164,7 +170,7 @@ export class WechatAdapter implements ChannelAdapter {
   async reply(message: IrisMessage): Promise<void> {
     const channelUserId = message.channelUserId;
     const accountId = channelUserId.split(':')[0];
-    const toUserId = message.channelUserId.split(':')[1];
+    const toUserId = channelUserId.split(':')[1];
     const conn = this.connections.get(accountId);
     if (!conn) {
       logger.error({ channelUserId }, 'wechat: no connection for accountId');

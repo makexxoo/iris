@@ -107,6 +107,7 @@ function extractText(itemList: Array<Record<string, unknown>>): string {
 // ---------------------------------------------------------------------------
 
 export class AccountConnection {
+  // 一般是 bot 的 id
   private readonly accountId: string;
   private readonly token: string;
   private readonly baseUrl: string;
@@ -406,10 +407,10 @@ export class AccountConnection {
     const irisMessage: IrisMessage = {
       id: randomUUID(),
       type: 'message',
-      channel: this.config.groupName,
-      // channelUserId format: "{accountId}:{fromUserId}" for routing in replyToUser
+      channelType: 'wechat',
+      channelName: this.config.groupName,
       channelUserId: `${this.accountId}:${senderId}`,
-      sessionId: `wechat:${this.config.groupName}:${this.accountId}:${senderId}`,
+      sessionId: `wechat:${this.accountId}:${senderId}`,
       content: [{ type: 'text', text }],
       timestamp: Date.now(),
       raw: {
@@ -421,11 +422,6 @@ export class AccountConnection {
 
     logger.info({ accountId: safeId(this.accountId), from: safeId(senderId) }, 'inbound message');
 
-    try {
-      await this.sendText(senderId, 'OK');
-    } catch (e) {
-      /* empty */
-    }
     this.onMessage(irisMessage);
   }
 
@@ -492,9 +488,7 @@ export class AccountConnection {
     const roomId = String(message['room_id'] ?? message['chat_room_id'] ?? '').trim();
     const toUserId = String(message['to_user_id'] ?? '').trim();
     const msgType = message['msg_type'];
-    const isGroup =
-      !!roomId ||
-      (!!toUserId && toUserId !== this.accountId && msgType === 1);
+    const isGroup = !!roomId || (!!toUserId && toUserId !== this.accountId && msgType === 1);
     return isGroup ? 'group' : 'dm';
   }
 }
