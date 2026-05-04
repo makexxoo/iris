@@ -35,6 +35,7 @@ export class AppConnection {
   private botOpenId: string | undefined;
 
   constructor(
+    private channelType: string,
     private config: FeishuAppConfig,
     private onMessage: (msg: IrisMessage) => void,
     /** The channel instance name (e.g. 'feishu-main'). Used to populate message.channel. */
@@ -134,7 +135,8 @@ export class AppConnection {
         this.onMessage({
           id: data.event_id ?? randomUUID(),
           type: 'message',
-          channel: this.channelName,
+          channelType: this.channelType,
+          channelName: this.channelName,
           channelUserId,
           sessionId: `${this.channelName}:${channelUserId}`,
           content,
