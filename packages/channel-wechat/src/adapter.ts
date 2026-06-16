@@ -134,11 +134,7 @@ export class WechatAdapter implements ChannelAdapter {
     }
 
     for (const group of groups) {
-      if (!group.accountIds?.length) {
-        logger.info({ group: group.name }, 'wechat: channel group has no accountIds, skipping');
-        continue;
-      }
-      for (const accountId of group.accountIds) {
+      for (const accountId of group.accountIds ?? []) {
         if (this.connections.has(accountId)) {
           logger.debug({ accountId, group: group.name }, 'wechat: account already connected');
           continue;
