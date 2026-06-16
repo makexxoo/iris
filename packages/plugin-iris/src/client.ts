@@ -100,7 +100,8 @@ export class IrisPluginClient {
       this.send({
         id: `${message.id}_reply`,
         type: 'message',
-        channel: message.channel,
+        channelType: message.channelType,
+        channelName: message.channelName,
         channelUserId: message.channelUserId,
         content: [
           {
