@@ -54,6 +54,8 @@ export interface WechatCredential {
   baseUrl: string;
   userId: string;
   savedAt: string;
+  /** 授权时绑定的分组标识，用于路由分发 */
+  groupName?: string;
 }
 
 // ---------------------------------------------------------------------------

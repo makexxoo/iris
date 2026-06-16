@@ -68,6 +68,8 @@ interface QrSession {
   credential?: WechatCredential;
   error?: string;
   createdAt: number;
+  /** 自定义分组标识，来自 /wechat/qr/new?code=xxx，授权确认后用作 groupName */
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,10 +160,12 @@ export class WechatAdapter implements ChannelAdapter {
 
     this.groupNames.add(WechatAdapter.defaultGroupName);
     all.forEach((cred) => {
+      const groupName = cred.groupName || WechatAdapter.defaultGroupName;
+      this.groupNames.add(groupName);
       this.addAccount({
         accountId: cred.accountId,
         token: cred.token,
-        groupName: WechatAdapter.defaultGroupName,
+        groupName,
       });
     });
   }
@@ -278,8 +282,9 @@ export class WechatAdapter implements ChannelAdapter {
      *   qrcode: string,      // raw QR value (for custom rendering)
      * }
      */
-    server.get('/wechat/qr/new', async (_req, reply) => {
+    server.get('/wechat/qr/new', async (req, reply) => {
       try {
+        const { code } = (req.query as { code?: string }) ?? {};
         const qrInfo: QrCodeInfo = await fetchQrCode();
         const sid = Math.random().toString(36).slice(2, 10);
 
@@ -289,8 +294,11 @@ export class WechatAdapter implements ChannelAdapter {
           baseUrl: qrInfo.baseUrl,
           status: 'wait',
           createdAt: Date.now(),
+          code,
         };
         this.qrSessions.set(sid, session);
+
+        logger.info({ sid, code }, 'wechat: new QR session created');
 
         // Background: keep polling until confirmed / expired / timeout
         this._bgPollQr(sid).catch((err: Error) => {
@@ -302,7 +310,7 @@ export class WechatAdapter implements ChannelAdapter {
           }
         });
 
-        const html = buildQrPage(sid, qrInfo.imageUrl);
+        const html = buildQrPage(sid, qrInfo.imageUrl, code);
         return reply.type('text/html; charset=utf-8').send(html);
       } catch (err) {
         logger.error({ err }, 'wechat: failed to fetch QR code');
@@ -439,21 +447,25 @@ export class WechatAdapter implements ChannelAdapter {
         case 'confirmed': {
           const { credential } = result;
 
-          // Persist to disk
+          // 将 session 中的 code 绑定到凭证上，用于重启后恢复分组
+          const groupName = s.code || WechatAdapter.defaultGroupName;
+          credential.groupName = groupName;
+
+          // Persist to disk（包含 groupName）
           await saveCredential(this.dataDir, credential);
 
           // Dynamically add the account to this adapter
           this.addAccount({
             accountId: credential.accountId,
             token: credential.token,
-            groupName: WechatAdapter.defaultGroupName,
+            groupName,
           });
 
           s.status = 'confirmed';
           s.credential = credential;
 
           logger.info(
-            { accountId: credential.accountId },
+            { accountId: credential.accountId, groupName },
             'wechat: QR login confirmed, account started',
           );
           return;
@@ -472,7 +484,8 @@ export class WechatAdapter implements ChannelAdapter {
 // HTML page builder
 // ---------------------------------------------------------------------------
 
-function buildQrPage(sid: string, imageUrl: string): string {
+function buildQrPage(sid: string, imageUrl: string, code?: string): string {
+  const groupLabel = code ? `分组: ${code}` : '';
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -649,7 +662,7 @@ function buildQrPage(sid: string, imageUrl: string): string {
   <!-- 微信内：立即授权 -->
   <div id="view-wechat">
     <h2>连接你的微信账号</h2>
-    <p>点击下方按钮，在微信中完成授权，即可将此账号接入 Iris。</p>
+    <p>点击下方按钮，在微信中完成授权，即可将此账号接入 Iris。<br/><b>${groupLabel}</b></p>
     <button class="btn btn-primary" id="btn-auth">立即授权</button>
     <div class="poll-row">
       <span class="dot" id="dot"></span>
