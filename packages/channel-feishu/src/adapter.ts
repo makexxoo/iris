@@ -38,6 +38,9 @@ export class FeishuAdapter implements ChannelAdapter {
   }
 
   async reply(message: IrisMessage): Promise<void> {
+    if (message.type === 'typing') {
+      return;
+    }
     const raw = message.raw as Record<string, any>;
     const conn = this.connections.get(raw.app_id);
     if (!conn) {

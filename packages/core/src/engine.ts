@@ -11,7 +11,7 @@ const logger = pino({ name: 'iris:engine' });
 export type MessageHandler = (message: IrisMessage) => Promise<void>;
 
 export class MessageEngine {
-  private backendAdapters = new Map<string, BackendAdapter>();
+  private backendAdapters = new Set<BackendAdapter>();
 
   constructor(
     private pipeline: PluginPipeline,
@@ -19,7 +19,7 @@ export class MessageEngine {
   ) {}
 
   registerBackend(adapter: BackendAdapter): void {
-    this.backendAdapters.set(adapter.name, adapter);
+    this.backendAdapters.add(adapter);
   }
 
   /**
@@ -39,6 +39,18 @@ export class MessageEngine {
       );
     }
   };
+
+  _selectBacked(backedName: string): BackendAdapter | undefined {
+    return Array.from(this.backendAdapters.values()).find((adapter) => {
+      if (adapter.name === backedName) {
+        return true;
+      }
+      if (adapter.name === 'iris') {
+        return (adapter as unknown as { config: { name: string } }).config.name === backedName;
+      }
+      return false;
+    });
+  }
 
   async _handle(message: IrisMessage): Promise<void> {
     // Normalize fields not yet set by the adapter (mirrors buildMessage defaults)
@@ -73,9 +85,8 @@ export class MessageEngine {
 
     // Route by channel instance name (adapter.name), fall back to default backend.
     // message.channel carries the adapter name set during registration.
-    const backendName =
-      this.config.backends.routes[message.channelName] ?? this.config.backends.default;
-    const backend = this.backendAdapters.get(backendName);
+    const backendName = this.config.backends.routes[message.channelName];
+    const backend = this._selectBacked(backendName);
     if (!backend) {
       logger.error({ backendName }, 'backend not found');
       message.content = [

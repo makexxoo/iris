@@ -96,7 +96,7 @@ export abstract class WebSocketSessionBackend extends SessionRoutedWsBackend<Web
     logger.info({ path, name: this.name }, `WS handler attached`);
   }
   protected onWsConnected(_connection: WebSocket): void {
-    logger.info({ name: this.name }, 'plugin connected');
+    logger.info({ name: this.name, wsPath: this.path }, 'plugin connected');
   }
   protected onWsDisconnected(_connection: WebSocket): void {
     logger.info({ name: this.name }, 'plugin disconnected');

@@ -1,4 +1,4 @@
-import { BackendRequest } from '../message';
+import { BackendRequest, IrisMessage } from '../message';
 import type { IncomingMessage, Server } from 'http';
 
 export interface BackendAdapter {

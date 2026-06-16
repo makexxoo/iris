@@ -12,6 +12,7 @@ import {
 } from '@agent-iris/core';
 import { FeishuAdapter } from '@agent-iris/channel-feishu';
 import { WechatAdapter, type WechatChannelGroup } from '@agent-iris/channel-wechat';
+import { TelegramAdapter } from '@agent-iris/channel-telegram';
 import { OpenclawChannelBackend } from '@agent-iris/backend-openclaw-channel';
 import { ClaudeCodeChannelBackend } from '@agent-iris/backend-claude-code-channel';
 import { HermesBackend } from '@agent-iris/backend-hermes';
@@ -108,7 +109,6 @@ async function main() {
     const backend = new IrisBackend({
       name: instance.name,
       timeoutMs: instance.timeoutMs,
-      wsPath: instance.wsPath,
     });
     router.registerBackend(backend);
     attachableBackends.push(backend);
@@ -145,7 +145,15 @@ async function main() {
         break;
       }
       case 'telegram': {
-        logger.warn({ name: channelCfg.name }, 'telegram channel not yet implemented, skipping');
+        const telegram = new TelegramAdapter(
+          { name: channelCfg.name, botToken: channelCfg.botToken },
+          router.handle,
+        );
+        channelAdapterRegistry.register(telegram);
+        logger.info(
+          { name: channelCfg.name, type: channelCfg.type },
+          'telegram channel registered',
+        );
         break;
       }
       case 'wechat': {

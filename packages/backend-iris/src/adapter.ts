@@ -1,11 +1,9 @@
 import { WebSocketSessionBackend } from '@agent-iris/core';
 
 export interface IrisBackendConfig {
-  name?: string;
+  name: string;
   /** How long to wait for a reply before timing out, in ms (default: 300000 = 5 min) */
   timeoutMs?: number;
-  /** WS path to listen on (default: /ws/hermes) */
-  wsPath?: string;
 }
 
 /**
@@ -21,9 +19,8 @@ export interface IrisBackendConfig {
 export class IrisBackend extends WebSocketSessionBackend {
   name = 'iris';
 
-  constructor(config: IrisBackendConfig) {
+  constructor(private readonly config: IrisBackendConfig) {
     const timeoutMs = config.timeoutMs ?? 300_000;
-    super(timeoutMs, config.wsPath ?? '/ws/iris');
-    this.name = config.name ?? 'iris';
+    super(timeoutMs, `/ws/iris/${config.name}`);
   }
 }

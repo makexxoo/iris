@@ -1,4 +1,4 @@
-export type MessageType = 'message' | 'message_update';
+export type MessageType = 'message' | 'message_update' | 'typing';
 
 export type MessageContentPart =
   | {
@@ -36,14 +36,15 @@ export interface IrisMessage {
   channelName: string;
   channelUserId: string;
   sessionId: string;
-  content: MessageContentPart[];
+  content?: MessageContentPart[];
   timestamp: number;
   raw: unknown;
   context?: Record<string, unknown>;
+  extra?: Record<string, unknown>;
 }
 
-export function extractTextFromContentParts(parts: MessageContentPart[]): string {
-  return parts
+export function extractTextFromContentParts(parts?: MessageContentPart[]): string {
+  return (parts ?? [])
     .filter((part): part is Extract<MessageContentPart, { type: 'text' }> => part.type === 'text')
     .map((part) => part.text)
     .join('');

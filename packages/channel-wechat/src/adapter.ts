@@ -172,6 +172,9 @@ export class WechatAdapter implements ChannelAdapter {
 
   /** Reply to a message that was received via a known AccountConnection. */
   async reply(message: IrisMessage): Promise<void> {
+    if (message.type === 'typing') {
+      return;
+    }
     const channelUserId = message.channelUserId;
     const accountId = channelUserId.split(':')[0];
     const toUserId = channelUserId.split(':')[1];
@@ -184,7 +187,7 @@ export class WechatAdapter implements ChannelAdapter {
     const text = extractTextFromContentParts(message.content);
     if (text) await conn.sendText(toUserId, text);
 
-    for (const part of message.content) {
+    for (const part of message.content ?? []) {
       try {
         if (part.type === 'image_url' && part.image_url.url.startsWith('data:')) {
           const comma = part.image_url.url.indexOf(',');

@@ -7,18 +7,211 @@ type RegisterServer = Parameters<ChannelAdapter['register']>[0];
 
 const logger = pino({ name: 'channel-telegram:adapter' });
 
-/** Supported Telegram parse_mode values for formatted text. */
-type ParseMode = 'MarkdownV2' | 'HTML' | 'Markdown';
+// ---------------------------------------------------------------------------
+// Markdown → Telegram MarkdownV2 converter (Hermes-style)
+// ---------------------------------------------------------------------------
+
+/** Characters that must be backslash-escaped in MarkdownV2. */
+const MDV2_ESCAPE_RE = /([_*[\]()~`>#+\-=|{}.!\\])/g;
+
+/** Matches a GFM table separator row (e.g. |---|:---:|---|). */
+const TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*){1,}\|?\s*$/;
 
 /**
- * Resolve the Telegram parse_mode from IrisMessage.extra.
- * Checks common keys: format, contentType, parseMode, parse_mode.
- * Maps 'markdown' / 'md' → MarkdownV2, 'html' → HTML.
+ * Convert standard markdown to Telegram MarkdownV2 format.
+ *
+ * Steps (matching hermes-agent's format_message):
+ * 0. Rewrite GFM pipe tables → bold-heading + bullet row groups
+ * 1. Extract & protect fenced code blocks from escaping
+ * 2. Extract & protect inline code from escaping
+ * 3. Convert markdown → MarkdownV2 syntax (bold, italic, links)
+ * 4. Escape all remaining special characters
+ * 5. Restore protected code blocks
  */
-function resolveParseMode(extra?: Record<string, unknown>): ParseMode | undefined {
-  if (!extra) return undefined;
+function formatToMarkdownV2(content: string): string {
+  if (!content) return content;
 
-  const formatHint = (
+  const placeholders = new Map<string, string>();
+  let counter = 0;
+  const ph = (value: string): string => {
+    const key = `\x00PH${counter++}\x00`;
+    placeholders.set(key, value);
+    return key;
+  };
+
+  let text = content;
+
+  // Step 0: Rewrite GFM pipe tables into row groups
+  text = wrapMarkdownTables(text);
+
+  // Step 1: Protect fenced code blocks — escape \ and ` inside them
+  text = text.replace(
+    /(```(?:[^\n]*\n)?[\s\S]*?```)/g,
+    (block) => {
+      const nlIdx = block.indexOf('\n');
+      const opening = nlIdx >= 0 ? block.slice(0, nlIdx + 1) : block;
+      const bodyAndClose = nlIdx >= 0 ? block.slice(nlIdx + 1) : '';
+      const closeLen = 3;
+      const body = bodyAndClose.slice(0, -closeLen);
+      const escaped = body.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+      return ph(opening + escaped + '```');
+    },
+  );
+
+  // Step 2: Protect inline code — escape \ inside them
+  text = text.replace(
+    /(`[^`]+`)/g,
+    (span) => ph(span.replace(/\\/g, '\\\\')),
+  );
+
+  // Step 3: Convert markdown links [text](url) → MarkdownV2
+  // In MarkdownV2 the display text must have ) and \ escaped
+  text = text.replace(
+    /\[([^\]]*)\]\(([^)]+)\)/g,
+    (_m, display: string, url: string) => {
+      const escaped = display.replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
+      return `[${escaped}](${url})`;
+    },
+  );
+
+  // Step 4: Convert **bold** → *bold* (MarkdownV2 single-asterisk bold)
+  text = text.replace(/\*\*([^*]+)\*\*/g, '*$1*');
+
+  // Step 5: Convert *italic* → _italic_ (MarkdownV2 underscore italic)
+  // Only outside words to avoid breaking snake_case
+  text = text.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '_$1_');
+
+  // Step 6: Convert ~~strikethrough~~ → ~strikethrough~
+  text = text.replace(/~~([^~]+)~~/g, '~$1~');
+
+  // Step 7: Escape all remaining MarkdownV2 special characters
+  text = text.replace(MDV2_ESCAPE_RE, '\\$1');
+
+  // Step 8: Restore placeholders (protected code blocks & inline code)
+  for (const [key, value] of placeholders) {
+    text = text.replace(key, value);
+  }
+
+  return text;
+}
+
+// ---------------------------------------------------------------------------
+// GFM table → Telegram-friendly row groups
+// ---------------------------------------------------------------------------
+// Telegram MarkdownV2 has no table syntax — '|' is just an escaped literal,
+// so pipe tables render as noisy backslash-pipe text. Hermes converts each
+// row into a bold heading plus bullet list, keeping content readable on
+// mobile while preserving the data.
+
+function wrapMarkdownTables(text: string): string {
+  if (!text.includes('|') || !text.includes('-')) return text;
+
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Skip content inside fenced code blocks
+    if (line.trimStart().startsWith('```')) {
+      inFence = !inFence;
+      out.push(line);
+      i++;
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    // Detect table: header row with '|' followed by a separator row
+    if (
+      line.includes('|') &&
+      i + 1 < lines.length &&
+      TABLE_SEPARATOR_RE.test(lines[i + 1])
+    ) {
+      const tableBlock: string[] = [line, lines[i + 1]];
+      let j = i + 2;
+      while (j < lines.length && lines[j].trim() && lines[j].includes('|')) {
+        tableBlock.push(lines[j]);
+        j++;
+      }
+      out.push(renderTableAsRowGroups(tableBlock));
+      i = j;
+      continue;
+    }
+
+    out.push(line);
+    i++;
+  }
+
+  return out.join('\n');
+}
+
+function splitTableRow(line: string): string[] {
+  let stripped = line.trim();
+  if (stripped.startsWith('|')) stripped = stripped.slice(1);
+  if (stripped.endsWith('|')) stripped = stripped.slice(0, -1);
+  return stripped.split('|').map((c) => c.trim());
+}
+
+function renderTableAsRowGroups(tableBlock: string[]): string {
+  if (tableBlock.length < 3) return tableBlock.join('\n');
+
+  const headers = splitTableRow(tableBlock[0]);
+  if (headers.length < 2) return tableBlock.join('\n');
+
+  // Detect row-label column: data rows have one more cell than headers
+  const firstDataRow = tableBlock.length > 2 ? splitTableRow(tableBlock[2]) : [];
+  const hasRowLabelCol = firstDataRow.length === headers.length + 1;
+
+  const groups: string[] = [];
+  for (let idx = 0; idx < tableBlock.length - 2; idx++) {
+    const cells = splitTableRow(tableBlock[idx + 2]);
+    let heading: string;
+    let dataCells: string[];
+
+    if (hasRowLabelCol) {
+      heading = cells[0] || `Row ${idx + 1}`;
+      dataCells = cells.slice(1);
+    } else {
+      heading = cells.find((c) => !!c) || `Row ${idx + 1}`;
+      dataCells = cells;
+    }
+
+    // Pad or trim to match header count
+    if (dataCells.length < headers.length) {
+      dataCells = [...dataCells, ...Array(headers.length - dataCells.length).fill('')];
+    } else if (dataCells.length > headers.length) {
+      dataCells = dataCells.slice(0, headers.length);
+    }
+
+    const bullets: string[] = [];
+    for (let ci = 0; ci < headers.length; ci++) {
+      // Skip bullet if its value duplicates the heading (noise)
+      if (!hasRowLabelCol && dataCells[ci] === heading) continue;
+      bullets.push(`• ${headers[ci]}: ${dataCells[ci]}`);
+    }
+
+    groups.push([`**${heading}**`, ...bullets].join('\n'));
+  }
+
+  return groups.join('\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Format resolution from IrisMessage.extra
+// ---------------------------------------------------------------------------
+
+function resolveFormat(
+  extra?: Record<string, unknown>,
+): { mode: 'MarkdownV2' | 'HTML' | undefined; convertMd: boolean } {
+  if (!extra) return { mode: undefined, convertMd: false };
+
+  const hint = (
     extra.format ??
     extra.contentType ??
     extra.parseMode ??
@@ -26,14 +219,18 @@ function resolveParseMode(extra?: Record<string, unknown>): ParseMode | undefine
     ''
   ).toString().toLowerCase();
 
-  if (formatHint === 'markdown' || formatHint === 'md' || formatHint === 'markdownv2') {
-    return 'MarkdownV2';
+  if (hint === 'markdown' || hint === 'md' || hint === 'markdownv2') {
+    return { mode: 'MarkdownV2', convertMd: true };
   }
-  if (formatHint === 'html') {
-    return 'HTML';
+  if (hint === 'html') {
+    return { mode: 'HTML', convertMd: false };
   }
-  return undefined;
+  return { mode: undefined, convertMd: false };
 }
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
 
 export interface TelegramConfig extends TelegramBotConfig {
   /** Channel instance name (e.g. 'telegram-main'). Used for routing. */
@@ -92,12 +289,14 @@ export class TelegramAdapter implements ChannelAdapter {
     const buffered = this.streamBuffer.get(message.id);
     this.streamBuffer.delete(message.id);
 
-    // Use the final message's text if available, otherwise the last buffered chunk
     const finalText = extractTextFromContentParts(message.content ?? []);
-    const text = finalText || buffered;
+    let text = finalText || buffered;
     if (text) {
-      const parseMode = resolveParseMode(message.extra);
-      await this.connection.sendText(chatId, text, parseMode);
+      const { mode, convertMd } = resolveFormat(message.extra);
+      if (convertMd) {
+        text = formatToMarkdownV2(text);
+      }
+      await this.connection.sendText(chatId, text, mode);
     }
 
     // Non-text content parts

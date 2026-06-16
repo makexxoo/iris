@@ -36,6 +36,13 @@ channels:
         groupPolicy: "open"
         streaming: true
         requireMention: true
+  - type: telegram
+    name: telegram-main
+    enabled: false
+    botToken: "xxx:AAxxx"
+    # dmPolicy: "open"        # open (default), disabled, or allowlist
+    # groupPolicy: "disabled"  # disabled (default), open, or allowlist
+
   # 微信分组：仅做路由分发分组，accountIds 指定该分组关联的账号
   # backends.routes 中用 name 做路由 key
   - type: wechat
@@ -101,9 +108,13 @@ backends:
 
   iris:
     instances:
-      - name: iris-default
-        enabled: true
-      # WS path: /ws/iris (default)
+      # name 作为ws的固定路径
+      # WS path: /ws/iris/default (default)
       # Run plugin-iris:
-      #   npx -y @agent-iris/plugin-iris --iris-ws ws://<iris-host>:9527/ws/iris --mode echo
+      #   npx -y @agent-iris/plugin-iris --iris-ws ws://<iris-host>:9527/ws/iris/default --mode echo
+      - name: default
+        enabled: true
+      # WS path: /ws/iris/foo (default)
+      - name: foo
+        enabled: true
 

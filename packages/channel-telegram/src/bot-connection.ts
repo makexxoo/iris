@@ -215,27 +215,60 @@ export class BotConnection {
   // Outbound — send methods
   // -------------------------------------------------------------------------
 
-  /** Send a text message. Supports optional parse_mode for Markdown/HTML formatting. */
+  /**
+   * Send a text message. Supports optional parse_mode for Markdown/HTML formatting.
+   * If MarkdownV2 parsing fails (LLMs often produce Telegram-incompatible markdown),
+   * automatically retries as plain text.
+   */
   async sendText(
     chatId: string | number,
     text: string,
     parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown',
   ): Promise<{ message_id: number }> {
-    return await this.bot.api.sendMessage(chatId, text, {
-      parse_mode: parseMode,
-    });
+    if (!parseMode) {
+      return await this.bot.api.sendMessage(chatId, text);
+    }
+
+    try {
+      return await this.bot.api.sendMessage(chatId, text, { parse_mode: parseMode });
+    } catch (err: any) {
+      // If MarkdownV2/HTML parse fails, fall back to plain text
+      if (err.error_code === 400 && err.description?.includes("can't parse")) {
+        logger.warn(
+          { err: err.description, parseMode },
+          'parse_mode failed, retrying as plain text',
+        );
+        return await this.bot.api.sendMessage(chatId, text);
+      }
+      throw err;
+    }
   }
 
-  /** Edit an existing text message. Supports optional parse_mode. */
+  /** Edit an existing text message. Supports optional parse_mode with fallback. */
   async editMessageText(
     chatId: string | number,
     messageId: number,
     text: string,
     parseMode?: 'MarkdownV2' | 'HTML' | 'Markdown',
   ): Promise<void> {
-    await this.bot.api.editMessageText(chatId, messageId, text, {
-      parse_mode: parseMode,
-    });
+    if (!parseMode) {
+      await this.bot.api.editMessageText(chatId, messageId, text);
+      return;
+    }
+
+    try {
+      await this.bot.api.editMessageText(chatId, messageId, text, { parse_mode: parseMode });
+    } catch (err: any) {
+      if (err.error_code === 400 && err.description?.includes("can't parse")) {
+        logger.warn(
+          { err: err.description, parseMode },
+          'editMessageText parse_mode failed, retrying as plain text',
+        );
+        await this.bot.api.editMessageText(chatId, messageId, text);
+        return;
+      }
+      throw err;
+    }
   }
 
   /**
