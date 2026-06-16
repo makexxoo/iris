@@ -83,6 +83,12 @@ export class WechatAdapter implements ChannelAdapter {
 
   private connections = new Map<string, AccountConnection>();
   private groupNames: Set<string> = new Set();
+  /**
+   * Buffer for streaming message_update chunks.
+   * Keyed by IrisMessage.id — accumulates all text content until the final
+   * message arrives, then flushed as a single send.
+   */
+  private readonly streamBuffer = new Map<string, string>();
   private readonly messageHandler: MessageHandler;
   readonly dataDir: string;
   private readonly dmPolicy: PolicyMode;
@@ -171,6 +177,7 @@ export class WechatAdapter implements ChannelAdapter {
     if (message.type === 'typing') {
       return;
     }
+
     const channelUserId = message.channelUserId;
     const accountId = channelUserId.split(':')[0];
     const toUserId = channelUserId.split(':')[1];
@@ -180,7 +187,21 @@ export class WechatAdapter implements ChannelAdapter {
       return;
     }
 
-    const text = extractTextFromContentParts(message.content);
+    // --- Streaming: buffer the chunk, don't send yet ---
+    if (message.type === 'message_update') {
+      const text = extractTextFromContentParts(message.content ?? []);
+      if (text) {
+        this.streamBuffer.set(message.id, text);
+      }
+      return;
+    }
+
+    // --- Final message: flush buffer + send ---
+    const buffered = this.streamBuffer.get(message.id);
+    this.streamBuffer.delete(message.id);
+
+    const finalText = extractTextFromContentParts(message.content ?? []);
+    const text = finalText || buffered;
     if (text) await conn.sendText(toUserId, text);
 
     for (const part of message.content ?? []) {

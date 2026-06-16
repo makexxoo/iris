@@ -96,12 +96,14 @@ function formatToMarkdownV2(content: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// GFM table → Telegram-friendly row groups
+// GFM table → ASCII table inside a code block
 // ---------------------------------------------------------------------------
-// Telegram MarkdownV2 has no table syntax — '|' is just an escaped literal,
-// so pipe tables render as noisy backslash-pipe text. Hermes converts each
-// row into a bold heading plus bullet list, keeping content readable on
-// mobile while preserving the data.
+// Telegram MarkdownV2 has no table syntax, but fenced code blocks (```)
+// use monospace font which preserves column alignment. We render tables as
+// compact ASCII art inside a code block so the tabular structure is kept.
+
+/** Max column width before truncation (keep mobile screens in mind). */
+const MAX_COL_WIDTH = 18;
 
 function wrapMarkdownTables(text: string): string {
   if (!text.includes('|') || !text.includes('-')) return text;
@@ -139,7 +141,7 @@ function wrapMarkdownTables(text: string): string {
         tableBlock.push(lines[j]);
         j++;
       }
-      out.push(renderTableAsRowGroups(tableBlock));
+      out.push(renderTableAsAscii(tableBlock));
       i = j;
       continue;
     }
@@ -158,48 +160,49 @@ function splitTableRow(line: string): string[] {
   return stripped.split('|').map((c) => c.trim());
 }
 
-function renderTableAsRowGroups(tableBlock: string[]): string {
+function renderTableAsAscii(tableBlock: string[]): string {
   if (tableBlock.length < 3) return tableBlock.join('\n');
 
   const headers = splitTableRow(tableBlock[0]);
   if (headers.length < 2) return tableBlock.join('\n');
 
-  // Detect row-label column: data rows have one more cell than headers
-  const firstDataRow = tableBlock.length > 2 ? splitTableRow(tableBlock[2]) : [];
-  const hasRowLabelCol = firstDataRow.length === headers.length + 1;
+  const dataRows = tableBlock.slice(2).map(splitTableRow);
+  const allRows = [headers, ...dataRows];
 
-  const groups: string[] = [];
-  for (let idx = 0; idx < tableBlock.length - 2; idx++) {
-    const cells = splitTableRow(tableBlock[idx + 2]);
-    let heading: string;
-    let dataCells: string[];
+  // Calculate column widths, capped at MAX_COL_WIDTH
+  const colWidths = headers.map((_, ci) => {
+    const max = Math.max(...allRows.map((row) => truncate(row[ci] ?? '', MAX_COL_WIDTH).length));
+    return Math.max(max, 3); // minimum 3 chars wide
+  });
 
-    if (hasRowLabelCol) {
-      heading = cells[0] || `Row ${idx + 1}`;
-      dataCells = cells.slice(1);
-    } else {
-      heading = cells.find((c) => !!c) || `Row ${idx + 1}`;
-      dataCells = cells;
-    }
+  const fmt = (row: string[]) =>
+    '│ ' +
+    row.map((cell, ci) => truncate(cell, MAX_COL_WIDTH).padEnd(colWidths[ci])).join(' │ ') +
+    ' │';
 
-    // Pad or trim to match header count
-    if (dataCells.length < headers.length) {
-      dataCells = [...dataCells, ...Array(headers.length - dataCells.length).fill('')];
-    } else if (dataCells.length > headers.length) {
-      dataCells = dataCells.slice(0, headers.length);
-    }
+  const sep =
+    '├' + colWidths.map((w) => '─'.repeat(w + 2)).join('┼') + '┤';
 
-    const bullets: string[] = [];
-    for (let ci = 0; ci < headers.length; ci++) {
-      // Skip bullet if its value duplicates the heading (noise)
-      if (!hasRowLabelCol && dataCells[ci] === heading) continue;
-      bullets.push(`• ${headers[ci]}: ${dataCells[ci]}`);
-    }
+  const top =
+    '┌' + colWidths.map((w) => '─'.repeat(w + 2)).join('┬') + '┐';
 
-    groups.push([`**${heading}**`, ...bullets].join('\n'));
-  }
+  const bottom =
+    '└' + colWidths.map((w) => '─'.repeat(w + 2)).join('┴') + '┘';
 
-  return groups.join('\n\n');
+  const ascii = [
+    top,
+    fmt(headers),
+    sep,
+    ...dataRows.map(fmt),
+    bottom,
+  ].join('\n');
+
+  return '\n```\n' + ascii + '\n```\n';
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + '…';
 }
 
 // ---------------------------------------------------------------------------
