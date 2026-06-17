@@ -53,6 +53,13 @@ export interface WechatGlobalConfig {
   dataDir?: string;
 }
 
+export interface TelegramGlobalConfig {
+  /**
+   * Telegram 代理 URL，例如 socks5://
+   */
+  proxyUrl?: string;
+}
+
 export type ChannelConfig = FeishuChannelConfig | TelegramChannelConfig | WechatChannelConfig;
 
 export interface BackendInstanceConfig {
@@ -77,6 +84,8 @@ export interface IrisConfig {
 
   /** 顶级微信模块全局配置 */
   wechat?: WechatGlobalConfig;
+
+  telegram?: TelegramGlobalConfig;
 
   /** All channel instances as an array. Each entry has a unique `name` and a `type`. */
   channels: ChannelConfig[];

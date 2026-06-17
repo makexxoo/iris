@@ -3,6 +3,12 @@ import type { Message } from 'grammy/types';
 import pino from 'pino';
 import type { IrisMessage, MessageContentPart } from '@agent-iris/core';
 
+// https-proxy-agent v9 is ESM-only; use require() for CJS compat
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { HttpsProxyAgent } = require('https-proxy-agent') as {
+  HttpsProxyAgent: new (proxyUrl: string) => any;
+};
+
 const logger = pino({ name: 'channel-telegram:botconnection' });
 
 // ---------------------------------------------------------------------------
@@ -19,6 +25,8 @@ export interface TelegramBotConfig {
   allowFrom?: string[];
   /** Allowed group/chat IDs when groupPolicy is 'allowlist' */
   groupAllowFrom?: string[];
+  /** HTTP(S) proxy URL for Telegram API calls, e.g. 'http://127.0.0.1:7890'. */
+  proxyUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,9 +48,16 @@ export class BotConnection {
     private readonly onMessage: (msg: IrisMessage) => void,
   ) {
     this.botToken = config.botToken;
-    this.bot = new Bot(config.botToken, {
-      client: { timeoutSeconds: 15 },
-    });
+
+    // Build client options with optional proxy support
+    const clientOpts: Record<string, any> = { timeoutSeconds: 15 };
+    if (config.proxyUrl) {
+      const agent = new HttpsProxyAgent(config.proxyUrl);
+      clientOpts.baseFetchConfig = { agent };
+      logger.info({ proxyUrl: config.proxyUrl }, 'using proxy for Telegram API');
+    }
+
+    this.bot = new Bot(config.botToken, { client: clientOpts });
     this.dmPolicy = config.dmPolicy ?? 'open';
     this.groupPolicy = config.groupPolicy ?? 'disabled';
     this.allowFrom = new Set(config.allowFrom ?? []);
@@ -66,11 +81,13 @@ export class BotConnection {
   // -------------------------------------------------------------------------
 
   start(): void {
-    this.bot.start({
-      allowed_updates: ['message'],
-    }).catch((err) => {
-      logger.error({ botToken: safeToken(this.botToken), err }, 'poll loop exited unexpectedly');
-    });
+    this.bot
+      .start({
+        allowed_updates: ['message'],
+      })
+      .catch((err) => {
+        logger.error({ botToken: safeToken(this.botToken), err }, 'poll loop exited unexpectedly');
+      });
     logger.info({ botToken: safeToken(this.botToken) }, 'Telegram bot polling started (grammY)');
   }
 
@@ -83,7 +100,10 @@ export class BotConnection {
   // Message handling
   // -------------------------------------------------------------------------
 
-  private async _handleMessage(ctx: { message: Message; update: { update_id: number } }): Promise<void> {
+  private async _handleMessage(ctx: {
+    message: Message;
+    update: { update_id: number };
+  }): Promise<void> {
     const msg = ctx.message;
 
     const chat = msg.chat;
@@ -280,11 +300,7 @@ export class BotConnection {
   }
 
   async sendPhoto(chatId: string | number, photo: Buffer, caption?: string): Promise<void> {
-    await this.bot.api.sendPhoto(
-      chatId,
-      new InputFile(photo, 'image.png'),
-      { caption },
-    );
+    await this.bot.api.sendPhoto(chatId, new InputFile(photo, 'image.png'), { caption });
   }
 
   async sendChatAction(chatId: string | number, action: string): Promise<void> {
@@ -297,11 +313,7 @@ export class BotConnection {
     filename: string,
     caption?: string,
   ): Promise<void> {
-    await this.bot.api.sendDocument(
-      chatId,
-      new InputFile(doc, filename),
-      { caption },
-    );
+    await this.bot.api.sendDocument(chatId, new InputFile(doc, filename), { caption });
   }
 }
 

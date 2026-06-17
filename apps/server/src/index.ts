@@ -146,7 +146,11 @@ async function main() {
       }
       case 'telegram': {
         const telegram = new TelegramAdapter(
-          { name: channelCfg.name, botToken: channelCfg.botToken },
+          {
+            name: channelCfg.name,
+            botToken: channelCfg.botToken,
+            proxyUrl: config.telegram?.proxyUrl,
+          },
           router.handle,
         );
         channelAdapterRegistry.register(telegram);

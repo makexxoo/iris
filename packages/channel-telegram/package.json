@@ -9,6 +9,7 @@
   "dependencies": {
     "@agent-iris/core": "workspace:*",
     "grammy": "^1.34.0",
+    "https-proxy-agent": "^9.1.0",
     "pino": "^9.0.0"
   }
 }
